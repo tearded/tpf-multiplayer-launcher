@@ -12,9 +12,9 @@
   <p><sub>Windows 10 / 11 · 64-bit · English</sub></p>
 </div>
 
-![Launcher preview with installation controls and release notes over a Transport Fever 2 city screenshot](docs/images/launcher-preview.jpg)
+![Launcher 1.0.0 preview with a launcher update notification, installation controls and game folder bar over a full-width Transport Fever 2 city background](docs/images/launcher-preview.jpg)
 
-<p align="center"><sub>Browser preview with sample data. Categorized patchnotes are a design example; the desktop launcher displays the original GitHub release text. City image © Urban Games.</sub></p>
+<p align="center"><sub>Version 1.0.0 browser preview with sample data and a simulated launcher update to 1.0.1. Release notes and mod versions are examples; the desktop launcher displays the original GitHub release text. City image © Urban Games.</sub></p>
 
 ## Get in game
 
