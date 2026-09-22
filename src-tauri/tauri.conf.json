@@ -1,0 +1,69 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TPF2 Multiplayer Launcher",
+  "version": "1.0.0",
+  "identifier": "io.github.tearded.tpf2-launcher",
+  "build": {
+    "beforeDevCommand": "npm run native && npm run dev",
+    "devUrl": "http://127.0.0.1:4319",
+    "beforeBuildCommand": "npm run native && npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "TPF2 Multiplayer",
+        "width": 1060,
+        "height": 860,
+        "minWidth": 700,
+        "minHeight": 650,
+        "center": true,
+        "backgroundColor": "#161719"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "createUpdaterArtifacts": true,
+    "publisher": "tearded",
+    "shortDescription": "Install and play Silver multiplayer for Transport Fever 2",
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "resources/TPF2Launcher.Native.exe": "TPF2Launcher.Native.exe"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEQ0JFOTUxQzVGQjlGRkMKUldUOG4vdkZVZW5MWGZOTzVhSjBsdDdaUk5FNllHUzR0c1pVZkMwNWI5SnZtUUhyWWJGcVp1bEwK",
+      "endpoints": [
+        "https://github.com/tearded/tpf-multiplayer-launcher/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

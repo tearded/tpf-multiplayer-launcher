@@ -1,0 +1,32 @@
+.markdown-notes {
+  white-space: normal;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.markdown-notes > :first-child { margin-top: 0; }
+.markdown-notes > :last-child { margin-bottom: 0; }
+.markdown-notes :is(h1, h2, h3, h4, h5, h6) {
+  margin: 24px 0 10px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+.markdown-notes p { margin: 0 0 16px; }
+.markdown-notes :is(ul, ol) { margin: 0 0 18px; padding-left: 22px; }
+.markdown-notes li { margin: 5px 0; }
+.markdown-notes li > p { margin-bottom: 6px; }
+.markdown-notes strong { font-weight: 650; color: var(--text); }
+.markdown-notes a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.markdown-notes a:hover { color: var(--text); }
+.markdown-notes code { font-family: Consolas, monospace; font-size: 0.95em; }
+.markdown-notes :not(pre) > code { padding: 2px 4px; background: var(--line); border-radius: 3px; }
+.markdown-notes pre { overflow-x: auto; padding: 12px; border: 1px solid var(--line); border-radius: 4px; }
+.markdown-notes blockquote { margin: 16px 0; padding-left: 14px; border-left: 2px solid var(--muted); }
+.markdown-notes hr { margin: 22px 0; border: 0; border-top: 1px solid var(--line); }
+.notes-table { max-width: 100%; overflow-x: auto; margin: 12px 0 22px; }
+.notes-table table { width: 100%; border-collapse: collapse; font-size: inherit; }
+.notes-table :is(th, td) { text-align: left; vertical-align: top; padding: 10px 12px; border: 1px solid var(--line); min-width: 110px; }
+.notes-table th { font-weight: 600; color: var(--text); }

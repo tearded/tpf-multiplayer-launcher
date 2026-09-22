@@ -1,0 +1,108 @@
+using System;
+using System.IO;
+using System.Linq;
+public static class UnitTests {
+    static int count;
+    static void Check(bool value,string label){if(!value)throw new Exception(label);count++;Console.WriteLine("PASS "+label);}
+    static void Reject(Action action,string label){try{action();}catch(InvalidDataException){Check(true,label);return;}throw new Exception("Accepted "+label);}
+    static void RuntimeProfiles(){
+        string root=Path.Combine(Path.GetTempPath(),"tpf2-runtime-test-"+Guid.NewGuid().ToString("N"));
+        string game=Path.Combine(root,"game");Directory.CreateDirectory(game);
+        foreach(string name in new[]{"alut.dll","tpf2_pluginhost.dll","tpf2_bridge_mp.dll","tpf2_slice.dll","tpf2_menu.dll","netpunch/netpunch.exe","mods/mp_lockstep_1/mod.lua","mods/mp_lockstep_1/res/config/game_script/lockstep.lua","mods/mp_lockstep_1/res/scripts/mp/net.lua"}){
+            string file=ProfileStore.SafePath(game,name);Directory.CreateDirectory(Path.GetDirectoryName(file));File.WriteAllText(file,name);
+        }
+        string sentinel=Path.Combine(game,"netpunch","user-data.txt");File.WriteAllText(sentinel,"preserve");
+        var store=new ProfileStore(Path.Combine(root,"store"),false);store.Initialize(game,"0.6.2.10");var single=store.Active;
+        string relative="netpunch/_internal/api-ms-win-core-console-l1-1-0.dll";
+        string runtime=ProfileStore.SafePath(game,relative);Directory.CreateDirectory(Path.GetDirectoryName(runtime));File.WriteAllText(runtime,"runtime fixture");
+        string nested=ProfileStore.SafePath(game,"netpunch/_internal/package/data.bin");Directory.CreateDirectory(Path.GetDirectoryName(nested));File.WriteAllText(nested,"nested data");
+        var bundled=store.Capture(game,"official","0.6.1.12","fixture","");
+        Check(bundled.Files.Any(f=>f.Path==relative)&&bundled.Files.Any(f=>f.Path.EndsWith("package/data.bin")),"runtime subtree captured");
+        store.Activate(bundled);store.Activate(single);
+        Check(!File.Exists(runtime)&&!File.Exists(nested)&&store.Matches(single,game),"single-file profile removes bundled runtime");
+        store.Activate(bundled);Check(store.Matches(bundled,game),"bundled runtime restored and hashed");
+        bool failed=false;try{store.Activate(single,n=>{if(!File.Exists(runtime))throw new IOException("fixture removal fault");});}catch(IOException){failed=true;}
+        Check(failed&&store.Matches(bundled,game)&&File.Exists(runtime)&&File.Exists(nested)&&!store.RecoveryPending,"rollback restores removed runtime");
+        Check(File.ReadAllText(sentinel)=="preserve","unmanaged netpunch data preserved");
+        File.AppendAllText(runtime,"modified");Check(!store.Matches(bundled,game),"runtime changes detected");
+        Check(store.BackupLimit==5,"default backup retention is five");
+        Reject(()=>store.SetBackupLimit(-1),"negative retention rejected");
+        Reject(()=>store.SetBackupLimit(2),"unsupported retention rejected");
+        var snapshots = new System.Collections.Generic.List<Profile>();
+        for (int i=0;i<4;i++) {
+            var snapshot=store.Capture(game,"local","0.6.1.12","retention","");
+            snapshot.CreatedUtc=DateTime.UtcNow.AddDays(10+i).ToString("o");
+            ProfileStore.Write(Path.Combine(store.Root,"Profiles",snapshot.Id,"profile.json"),snapshot);
+            snapshots.Add(snapshot);
+        }
+        string profiles=Path.Combine(store.Root,"Profiles");
+        string unknown=Path.Combine(profiles,"unmanaged");Directory.CreateDirectory(unknown);File.WriteAllText(Path.Combine(unknown,"keep.txt"),"keep");
+        store.SetBackupLimit(0);int before=Directory.GetDirectories(profiles).Length;store.PruneBackups();
+        Check(Directory.GetDirectories(profiles).Length==before,"unlimited preserves backups");
+        store.SetBackupLimit(1);
+        Check(new ProfileStore(store.Root,false).BackupLimit==1,"backup limit persists");
+        string journal=Path.Combine(store.Root,"switch-pending.json");
+        ProfileStore.Write(journal,new SwitchJournal{Previous=store.State,Restore=snapshots[0].Id});
+        store.PruneBackups();Check(Directory.GetDirectories(profiles).Length==before,"pending recovery prevents all cleanup");File.Delete(journal);
+        store.State.Fork=snapshots[0].Id;store.Save();
+        store.PruneBackups();
+        Check(store.State.Fork==null,"legacy cached reference does not retain old backups forever");
+        Check(Directory.GetDirectories(profiles).Length==3,"one historical backup plus active profile and unmanaged folder");
+        Check(Directory.Exists(Path.Combine(profiles,snapshots[3].Id))&&!Directory.Exists(Path.Combine(profiles,snapshots[0].Id)),"newest backup kept and oldest removed");
+        store.Verify(store.Active);Check(true,"active profile survives cleanup");
+        if(store.State.Official!=null)store.Verify(store.Load(store.State.Official));
+        Check(File.Exists(Path.Combine(unknown,"keep.txt")),"unknown folders remain untouched");
+        Check(store.Matches(bundled,game)==false&&File.ReadAllText(sentinel)=="preserve","cleanup does not modify game files");
+        string downloads=Path.Combine(store.Root,"Downloads");Directory.CreateDirectory(downloads);
+        File.WriteAllText(Path.Combine(downloads,"TpF2Multiplayer-0.6.1.14.msi"),"cached");
+        File.WriteAllText(Path.Combine(downloads,"TpF2Multiplayer-0.6.1.18.msi"),"cached");
+        File.WriteAllText(Path.Combine(downloads,"unrelated.msi"),"keep");
+        LauncherSetup.CleanDownloads(store.Root);
+        Check(Directory.GetFiles(downloads).Length==1&&File.Exists(Path.Combine(downloads,"unrelated.msi")),"completed mod installers removed, unknown files preserved");
+        string stage=Path.Combine(Path.GetTempPath(),"tpf2-"+Guid.NewGuid().ToString("N").Substring(0,12));Directory.CreateDirectory(stage);
+        Directory.CreateDirectory(Path.Combine(stage,"nested"));File.WriteAllText(Path.Combine(stage,"nested","fixture"),"temporary");
+        LauncherSetup.CleanStage(stage);Check(!Directory.Exists(stage),"owned extraction directory removed");
+        LauncherSetup.CleanStage(root);Check(Directory.Exists(root),"cleanup rejects unrelated temp directory");
+        Console.WriteLine("Runtime fixtures: "+root);
+    }
+    public static void Main(){
+        Check(Updater.IsNewer("0.6.1","v0.6.1.1"),"four-part hotfix");
+        Check(!Updater.IsNewer("0.6.1.1","v0.6.1"),"no implicit downgrade");
+        Check(Updater.IsNewer("0.6.1.9","v0.6.1.10"),"numeric comparison");
+        foreach(string version in new[]{"v0.6.1.1-beta","1.0","1.0.0.0.1","0.6.1.999999999999999999","1.0.0\n"})Reject(()=>Updater.ParseVersion(version),"invalid version");
+        foreach(string path in new[]{"../outside.dll","C:/Windows/file.dll","plugins/other.dll","alut_real.dll","mods/mp_lockstep_1/../other.lua","mods/mp_lockstep_1/test.lua:stream"})
+            Reject(()=>ProfileStore.SafePath(Path.GetTempPath(),path),"path restriction "+path);
+        Check(ProfileStore.Managed("mods/mp_lockstep_1/res/scripts/mp/net.lua"),"managed Lua");
+        Check(ProfileStore.Managed("plugins/tpf2_workshop_register.dll"),"managed workshop plugin");
+        foreach(string path in new[]{"netpunch/_internal/../outside.dll","netpunch/_internal/file.dll:stream","netpunch/_internal-other/file.dll","netpunch/user-data.txt","netpunch/_internal/pkg/../../outside.dll"})
+            Reject(()=>ProfileStore.SafePath(Path.GetTempPath(),path),"runtime path restriction "+path);
+        Reject(()=>LauncherSetup.RequireSilver(new Profile{Channel="fork"}),"manual legacy activation blocked");
+        Reject(()=>LauncherSetup.RequireSilver(new Profile{Channel="local"}),"manual local activation blocked");
+        RuntimeProfiles();
+        var asset=new Asset{name="TpF2Multiplayer.msi",size=1,digest="sha256:"+new string('a',64),browser_download_url="https://github.com/silver2127/tpf2-multiplayer/releases/download/v0.6.1.1/TpF2Multiplayer.msi"};
+        var release=new Release{tag_name="v0.6.1.1",assets=new[]{asset}};release.Validate();Check(true,"valid fixed source");
+        release.Repository="tearded/tpf2-multiplayer";
+        asset.browser_download_url="https://github.com/tearded/tpf2-multiplayer/releases/download/v0.6.1.1/TpF2Multiplayer.msi";
+        Reject(()=>release.Validate(),"community release rejected even with a matching asset URL");
+        Reject(()=>Updater.Fetch("fork").GetAwaiter().GetResult(),"legacy fork feed rejected before network access");
+        Reject(()=>Updater.Fetch("community").GetAwaiter().GetResult(),"community feed rejected before network access");
+        release.Repository="silver2127/tpf2-multiplayer";
+        asset.browser_download_url="https://github.com/silver2127/tpf2-multiplayer/releases/download/v0.6.1.1/TpF2Multiplayer.msi";
+        release.prerelease=true;Reject(()=>release.Validate(),"prerelease blocked by default");
+        release.AllowExperimental=true;release.Validate();Check(true,"explicit experimental selection allows verified prerelease");
+        release.AllowExperimental=false;release.prerelease=false;
+        release.name="0.6.1.1 (experimental)";
+        Check(release.Experimental,"experimental title recognized without GitHub prerelease flag");
+        Reject(()=>release.Validate(),"title-marked experimental release blocked in stable mode");
+        Check(Updater.SelectRelease(new[]{release},false)==null,"stable feed excludes title-marked experimental release");
+        Check(Updater.SelectRelease(new[]{release},true)==release,"experimental feed includes title-marked release");
+        release.AllowExperimental=false;release.name="Stable with experimental fixes";
+        Check(release.Experimental,"ambiguous experimental title is conservatively classified");
+        release.name="0.6.1.1";release.body="Fixes a bug reported in experimental builds.";
+        Check(!release.Experimental,"historical experimental mention in body does not misclassify stable release");
+        Reject(()=>Updater.FetchVersion("0.6.1-beta").GetAwaiter().GetResult(),"non-numeric tag rejected before network access");
+        release.draft=true;Reject(()=>release.Validate(),"draft blocked");release.draft=false;
+        asset.browser_download_url="https://example.com/TpF2Multiplayer.msi";Reject(()=>release.Validate(),"foreign source blocked");
+        Console.WriteLine("PASS total="+count);
+    }
+}

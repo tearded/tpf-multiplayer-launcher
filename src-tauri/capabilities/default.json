@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Local launcher window, fixed native operations and signed launcher updates only",
+  "windows": ["main"],
+  "permissions": ["core:default", "updater:default"]
+}

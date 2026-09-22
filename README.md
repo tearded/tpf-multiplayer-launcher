@@ -1,0 +1,115 @@
+<div align="center">
+  <img src="public/images/launcher-logo.svg" width="80" height="80" alt="Silver train logo">
+  <h1>TPF2 Multiplayer Launcher</h1>
+  <p>Install, update and play <a href="https://github.com/silver2127/tpf2-multiplayer">Silver’s multiplayer mod</a> for Transport Fever 2.</p>
+  <p>
+    <a href="https://github.com/tearded/tpf-multiplayer-launcher/releases/latest"><strong>Download for Windows</strong></a>
+    &nbsp; · &nbsp;
+    <a href="https://github.com/tearded/tpf-multiplayer-launcher/releases">Release notes</a>
+    &nbsp; · &nbsp;
+    <a href="https://github.com/tearded/tpf-multiplayer-launcher/issues">Report an issue</a>
+  </p>
+  <p><sub>Windows 10 / 11 · 64-bit · English</sub></p>
+</div>
+
+![Launcher preview with installation controls and release notes over a Transport Fever 2 city screenshot](docs/images/launcher-preview.jpg)
+
+<p align="center"><sub>Browser preview with sample data. Categorized patchnotes are a design example; the desktop launcher displays the original GitHub release text. City image © Urban Games.</sub></p>
+
+## Get in game
+
+Download **Setup.exe** from the [launcher releases](https://github.com/tearded/tpf-multiplayer-launcher/releases/latest). The installer runs for the current Windows user and installs WebView2 if needed.
+
+Requirements: Windows 10/11 x64, Steam, and Transport Fever 2 Steam build 35924. Downloads require an internet connection.
+
+1. Check the detected game folder, or select it with **Change**.
+2. Click **Install multiplayer** or **Update & play**. The launcher verifies the download, backs up the current mod files, installs multiplayer and starts the game through Steam.
+3. Everyone in a multiplayer session must use the same mod version.
+
+When GitHub is unavailable, an installed multiplayer version can still be started.
+
+## What it does
+
+| Feature | What you can do |
+| :--- | :--- |
+| **Install & play** | Verify the package, back up the current mod, install Silver and launch through Steam. |
+| **Stable or Experimental** | Choose your release track in Settings. Experimental installs ask for confirmation. |
+| **Previous releases** | Browse release history and install an older, verifiable version when your group needs it. |
+| **Backups you control** | Keep 1, 3, 5, 10 or unlimited historical backups. Five is the default. |
+| **Separate update checks** | Check both the multiplayer mod and the launcher. Launcher updates appear in Settings and install only when you choose. |
+| **Recovery** | Restore managed mod files after an interrupted installation. Saves and unrelated mods are preserved. |
+
+## A few useful details
+
+<details>
+<summary><strong>Release history and older versions</strong></summary>
+
+Expand **Release history** below the current patchnotes to browse older Silver releases for the selected track, with dates and original notes. **Load more releases** retrieves the next page. Each release can be installed after confirmation; the latest available version remains displayed separately. Historical packages must pass the same checksum, source and compatibility checks, so some old releases without verifiable packages cannot be installed.
+
+</details>
+
+<details>
+<summary><strong>What is backed up and cleaned up</strong></summary>
+
+Settings offers 1, 3, 5 (default), 10, or unlimited historical profile backups. The preference is stored locally and cleanup runs after the next successful mod installation, not when the selection changes. Only the active profile is retained separately; cached historical versions count toward the limit. Cleanup is skipped entirely while recovery is pending; unknown or linked folders are not removed. Completed downloaded MSI packages are removed after successful installation, and newly created extraction/staging directories are cleaned when their operation ends. Old base-installer archives and temporary directories from previous launcher versions are not swept automatically.
+
+</details>
+
+<details>
+<summary><strong>How updates work</strong></summary>
+
+Launcher updates and multiplayer updates are separate. The launcher checks its own repository on startup independently of mod checks. An available update appears as a highlighted button with the new version in the top-right corner. Click it to open Settings and install the signed launcher update, or open **Settings** to check again. Installation remains manual. The installer does not have an Authenticode certificate.
+
+Multiplayer releases are fetched exclusively from `silver2127/tpf2-multiplayer`. Downloads are checked against the release URL, size, SHA-256 checksum and MSI metadata. Drafts are excluded. Settings selects Stable (default) or Experimental; GitHub prerelease flags and experimental/alpha/beta/preview/RC words in release titles determine the track. Both tracks currently require numeric three- or four-part version tags. Release body mentions alone do not determine the track; read the notes before updating.
+
+</details>
+
+<details>
+<summary><strong>Build and run from source</strong></summary>
+
+Requires Node.js 24, Rust (pinned in `rust-toolchain.toml`), MSVC Build Tools with the Windows SDK, and .NET Framework 4.x. The UI uses Tauri 2 / WebView2, with a C# helper for installation and profiles.
+
+```powershell
+npm ci
+npm run desktop
+```
+
+For a browser preview with clearly marked sample data, run `node serve.mjs` and open http://127.0.0.1:4318. The preview does not install or launch anything. The previous minimal design remains available at `/fallback.html`; use the links in the preview header to compare both designs.
+
+```powershell
+npm run build
+npm run native
+node --test tests/*.test.js
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-unit.ps1
+cd src-tauri
+cargo test --locked
+```
+
+`npm run test:native` also exercises a real Silver release in isolated copies of the mod files. It requires a compatible existing game installation and internet access. It does not alter the real game installation. Local profile fixtures test migration and rollback.
+
+If Windows still shows an old launcher icon after an update, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/refresh-windows-icons.ps1`, then reopen the launcher. This refreshes matching Desktop, Start menu and pinned taskbar shortcuts using the current icon artwork.
+
+</details>
+
+<details>
+<summary><strong>Publish a launcher release</strong></summary>
+
+1. Bump the version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock` and `src-tauri/tauri.conf.json` together.
+2. Add release notes in `docs/releases/<version>.md`.
+3. Push the reviewed commit to `main` and tag it `v<version>`.
+
+The Windows workflow runs only when a version tag such as `v1.0.0` is pushed. Normal commits and pull requests do not trigger a build. The workflow builds and tests the source, signs the installer with the `TAURI_SIGNING_PRIVATE_KEY` GitHub Actions secret, creates update metadata and uploads a draft release. It downloads and verifies the assets before publishing. Existing releases are never replaced.
+
+Keep the private signing key outside the repository and backed up. Existing installations only accept updates signed with that key. The public verification key is in the Tauri configuration.
+
+Local packaging: `npm run package` with `TAURI_SIGNING_PRIVATE_KEY` configured, followed by `scripts/prepare-release.ps1`. Artifacts go to the ignored `release/` directory.
+
+</details>
+
+## Credits
+
+Multiplayer mod by **[silver2127](https://github.com/silver2127/tpf2-multiplayer)**. Launcher by **[tearded](https://github.com/tearded)**.
+
+Launcher code: MIT. This is not an official Urban Games product.
+
+Transport Fever 2 screenshot © Urban Games; it is not included in the MIT license. See [image attribution](public/images/ATTRIBUTION.md) for its source and the non-commercial fan-content policy. Multiplayer packages retain their upstream licenses.
