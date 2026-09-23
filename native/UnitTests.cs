@@ -5,6 +5,16 @@ public static class UnitTests {
     static int count;
     static void Check(bool value,string label){if(!value)throw new Exception(label);count++;Console.WriteLine("PASS "+label);}
     static void Reject(Action action,string label){try{action();}catch(InvalidDataException){Check(true,label);return;}throw new Exception("Accepted "+label);}
+    static void StockAudioGuards(){
+        string game=Path.Combine(Path.GetTempPath(),"tpf2-audio-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(game);
+        foreach(string scenario in new[]{"missing","mod loader","modified backup"}) {
+            if(scenario=="mod loader")File.WriteAllText(Path.Combine(game,"alut.dll"),"mod loader fixture");
+            if(scenario=="modified backup")File.WriteAllText(Path.Combine(game,"alut_real.dll"),"modified backup fixture");
+            bool rejected=false;try{LauncherSetup.PreserveStockAudio(game);}catch(InvalidOperationException ex){rejected=ex.Message.Contains("Steam");}
+            Check(rejected,"stock audio preflight rejects "+scenario+" with repair guidance");
+        }
+        Check(File.ReadAllText(Path.Combine(game,"alut.dll"))=="mod loader fixture"&&File.ReadAllText(Path.Combine(game,"alut_real.dll"))=="modified backup fixture","stock audio preflight never overwrites unknown files");
+    }
     static void RuntimeProfiles(){
         string root=Path.Combine(Path.GetTempPath(),"tpf2-runtime-test-"+Guid.NewGuid().ToString("N"));
         string game=Path.Combine(root,"game");Directory.CreateDirectory(game);
@@ -13,6 +23,30 @@ public static class UnitTests {
         }
         string sentinel=Path.Combine(game,"netpunch","user-data.txt");File.WriteAllText(sentinel,"preserve");
         var store=new ProfileStore(Path.Combine(root,"store"),false);store.Initialize(game,"0.6.2.10");var single=store.Active;
+        File.WriteAllText(Path.Combine(game,"TransportFever2.exe"),"game fixture");
+        File.WriteAllText(Path.Combine(game,"alut_real.dll"),"stock audio fixture");
+        Check(store.Installed(game).Id==single.Id,"complete installation detected from game files");
+        foreach(var entry in single.Files) {
+            string path=ProfileStore.SafePath(game,entry.Path),contents=File.ReadAllText(path);
+            File.Delete(path);
+            Check(new ProfileStore(store.Root,false).Installed(game)==null,"stale profile rejected after removal of "+entry.Path);
+            File.WriteAllText(path,contents);
+        }
+        File.WriteAllText(Path.Combine(game,"alut.dll"),"stock audio fixture");
+        Check(store.Installed(game)==null&&!ProfileStore.HasModFiles(game),"Steam-restored stock loader is not multiplayer");
+        File.WriteAllText(Path.Combine(game,"alut.dll"),"different mod loader");
+        Check(store.Installed(game)==null,"replaced loader cannot claim cached version");
+        File.WriteAllText(Path.Combine(game,"alut.dll"),"alut.dll");
+        Check(store.Installed(null)==null&&store.Installed(Path.Combine(root,"other-game"))==null,"missing or different game folder is not installed");
+        File.Delete(Path.Combine(game,"TransportFever2.exe"));
+        Check(store.Installed(game)==null,"uninstalled game is not reported as installed");
+        File.WriteAllText(Path.Combine(game,"TransportFever2.exe"),"game fixture");
+        File.AppendAllText(ProfileStore.SafePath(game,"mods/mp_lockstep_1/mod.lua"),"local edit");
+        Check(store.Installed(game)!=null,"local Lua edits do not hide installed mod");
+        File.WriteAllText(ProfileStore.SafePath(game,"mods/mp_lockstep_1/mod.lua"),"mods/mp_lockstep_1/mod.lua");
+        store.Initialize(game,"0.7",true);
+        Check(store.Active.Version=="0.7"&&store.Installed(game)!=null,"base reinstall replaces stale active state");
+        store.Verify(single);Check(true,"base reinstall preserves previous backup");
         string bigmapDll=ProfileStore.SafePath(game,"plugins/tpf2_bigmap.dll");
         string bigmapCfg=ProfileStore.SafePath(game,"plugins/tpf2_bigmap.cfg");
         Directory.CreateDirectory(Path.GetDirectoryName(bigmapDll));
@@ -80,6 +114,7 @@ public static class UnitTests {
         Console.WriteLine("Runtime fixtures: "+root);
     }
     public static void Main(){
+        StockAudioGuards();
         Check(Updater.IsNewer("0.6.1","v0.6.1.1"),"four-part hotfix");
         Check(!Updater.IsNewer("0.6.1.1","v0.6.1"),"no implicit downgrade");
         Check(Updater.IsNewer("0.6.1.9","v0.6.1.10"),"numeric comparison");

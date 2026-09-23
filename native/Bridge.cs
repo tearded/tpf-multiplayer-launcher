@@ -32,7 +32,7 @@ public static class NativeBridge {
     }
     static object Status(ProfileStore store) {
         string folder=null;try{folder=Updater.GameFolder();}catch(InvalidOperationException){}
-        var active=store.Active;
+        var active=store.Installed(folder);
         return new {gameFolder=folder,installed=active==null?null:new {version=active.Version,channel=PublicChannel(active.Channel)},
             running=Updater.GameRunning(),recovery=store.RecoveryPending,initialized=store.State!=null,backupLimit=store.BackupLimit,experimental=store.ExperimentalReleases};
     }
@@ -40,8 +40,10 @@ public static class NativeBridge {
         if(store.State!=null||Updater.GameRunning())return;
         string version=Updater.RegistryValue("Version");
         if(version==null)return;
+        string folder;try{folder=Updater.GameFolder();}catch(InvalidOperationException){return;}
+        if(!ProfileStore.HasModFiles(folder))return;
         RequireOldLauncherClosed();
-        store.Initialize(Updater.GameFolder(),version);
+        store.Initialize(folder,version);
     }
     static async Task<object> Run(string action,string channel,string expectedVersion) {
         Channel(channel);
@@ -88,10 +90,13 @@ public static class NativeBridge {
                 if(expectedVersion==null)throw new InvalidDataException("Check the available release first.");
                 var release=await Updater.FetchVersion(expectedVersion,store.ExperimentalReleases);
                 if(release==null||release.Number.ToString()!=expectedVersion)throw new InvalidOperationException("The available release has changed. Check for updates again.");
-                if(store.State==null) {
+                string game=Updater.GameFolder();
+                if(store.State!=null&&!String.Equals(game,store.State.GameFolder,StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Existing backups belong to a different game folder.");
+                if(store.State==null||store.Installed(game)==null) {
                     Progress("Setting up multiplayer…");
                     await LauncherSetup.InstallBase(release,p=>Progress("Downloading multiplayer…",p));
-                    store.Initialize(Updater.GameFolder(),Updater.RegistryValue("Version"));
+                    store.Initialize(Updater.GameFolder(),release.Number.ToString(),true);
                 }
                 Progress("Downloading and verifying release…");
                 var target=await store.PrepareRelease(release,p=>Progress("Downloading release…",p));
@@ -109,7 +114,8 @@ public static class NativeBridge {
                 await LauncherSetup.Activate(store,store.Load(journal.Restore));return Status(store);
             }
             case "play":
-                if(store.Active==null||store.Active.Channel!="official")throw new InvalidOperationException("Install multiplayer before starting the game from this launcher.");
+                var installed=store.Installed(Updater.GameFolder());
+                if(installed==null||installed.Channel!="official")throw new InvalidOperationException("Install multiplayer before starting the game from this launcher.");
                 if(store.RecoveryPending)throw new InvalidOperationException("Restore the interrupted installation first.");
                 Updater.RequireClosed();Updater.GameFolder();Open("steam://rungameid/1066780");return new {started=true};
             case "game-folder": Open(Updater.GameFolder());return new {opened=true};

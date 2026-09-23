@@ -90,6 +90,16 @@ test("closing the game unlocks updates without restarting the launcher", async (
   assert.match(ui.node(".connection-status").textContent, /Game closed/);
 });
 
+test("removed mod clears the cached version and offers reinstall even for the same release", async () => {
+  const ui = setup(async () => ({ ...state(false), installed: null }));
+  ui.setState(state(false), { version: "0.6.1.1", installable: true });
+  assert.equal(ui.node("main-action/span").textContent, "Play");
+  await ui.refreshGameStatus();
+  assert.equal(ui.node("installed-version").textContent, "Not installed");
+  assert.equal(ui.node("main-action/span").textContent, "Install multiplayer");
+  assert.equal(ui.node("play-current").hidden, true);
+});
+
 test("game start is observed and blocks updates with an explicit label", async () => {
   let running = false;
   const ui = setup(async () => state(running));

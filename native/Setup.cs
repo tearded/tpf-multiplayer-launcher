@@ -56,6 +56,16 @@ public static class LauncherSetup {
         Updater.Verify(release,staged);
         return staged;
     }
+    static string RepairOptions(string package) {
+        dynamic installer=Activator.CreateInstance(Type.GetTypeFromProgID("WindowsInstaller.Installer"));
+        dynamic database=installer.OpenDatabase(package,0);
+        dynamic view=database.OpenView("SELECT `Value` FROM `Property` WHERE `Property` = 'ProductCode'");view.Execute();
+        dynamic row=view.Fetch();
+        if(row==null)throw new InvalidDataException("MSI product code is missing.");
+        string productCode=row.StringData[1];view.Close();
+        // Only reinstall an actually registered product; stale mod registry data is insufficient.
+        return installer.ProductState[productCode]==5 ? " REINSTALL=ALL REINSTALLMODE=amus" : "";
+    }
     internal static void CleanStage(string directory) {
         try {
             string full = Path.GetFullPath(directory);
@@ -81,23 +91,38 @@ public static class LauncherSetup {
             File.Delete(file);
         }
     }
+    internal static void PreserveStockAudio(string game) {
+        const string stockHash="3DF103AE3D94A6B90C4D2A6D75DCB388CD835F5E3AF9962B22C20D4473CFC035";
+        string original=Path.Combine(game,"alut_real.dll"),loader=Path.Combine(game,"alut.dll");
+        if(File.Exists(original)) {
+            if(ProfileStore.Hash(original)!=stockHash)throw new InvalidOperationException("The original audio DLL is modified. Verify the game files in Steam before installing multiplayer.");
+            return;
+        }
+        if(!File.Exists(loader)||ProfileStore.Hash(loader)!=stockHash)
+            throw new InvalidOperationException("The original audio DLL is missing. Verify the game files in Steam before installing multiplayer.");
+        // Removing a registered older MSI can delete Steam's restored alut.dll
+        // before the new installer's PreserveStockAlut action gets to run.
+        File.Copy(loader,original,false);
+        if(ProfileStore.Hash(original)!=stockHash)throw new IOException("Could not verify the original audio DLL backup.");
+    }
     public static async Task InstallBase(Release release,Action<int> progress) {
         if(release.Channel!="official")throw new InvalidOperationException("Install the Silver multiplayer base first.");
         Updater.RequireClosed();string game=Updater.GameFolder();
         string package=await Updater.Download(release,progress);ValidateMsi(package,release);
         await Task.Run(()=>Updater.Backup(game,Updater.RegistryValue("Version")??"First installation"));
         Updater.RequireClosed();
+        PreserveStockAudio(game);
         string stage=Path.Combine(Path.GetTempPath(),"tpf2-base-"+Guid.NewGuid().ToString("N").Substring(0,12));
         try {
         package=StageMsi(release,package,stage);
         string log=Path.Combine(Updater.Home,"base-install-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".log");
-        var info=new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,"msiexec.exe"),"/i \""+package+"\" /passive /norestart MSIRESTARTMANAGERCONTROL=Disable INSTALLFOLDER=\""+game+"\" /L*v \""+log+"\""){UseShellExecute=true,Verb="runas"};
+        var info=new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,"msiexec.exe"),"/i \""+package+"\" /passive /norestart MSIRESTARTMANAGERCONTROL=Disable INSTALLFOLDER=\""+game+"\""+RepairOptions(package)+" /L*v \""+log+"\""){UseShellExecute=true,Verb="runas"};
         using(var process=Process.Start(info)){
             await Task.Run(()=>process.WaitForExit());
             if(process.ExitCode==3010)throw new InvalidOperationException("Base installation complete. Restart Windows, then reopen the launcher.");
             if(process.ExitCode!=0)throw new InvalidOperationException("Base installation incomplete ("+process.ExitCode+"). Log: "+log);
         }
-        if(!Updater.SameVersion(Updater.RegistryValue("Version"),release.Number.ToString())||!File.Exists(Path.Combine(game,"alut_real.dll")))throw new InvalidOperationException("Could not verify the base installation.");
+        if(!Updater.SameVersion(Updater.RegistryValue("Version"),release.Number.ToString())||!ProfileStore.HasModFiles(game))throw new InvalidOperationException("Could not verify the base installation.");
         } finally { CleanStage(stage); }
     }
 }

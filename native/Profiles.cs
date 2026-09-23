@@ -169,6 +169,20 @@ public sealed class ProfileStore {
         return profile;
     }
     public Profile Active { get { return State == null ? null : Load(State.Active); } }
+    public static bool HasModFiles(string game) {
+        if (String.IsNullOrEmpty(game) || !File.Exists(System.IO.Path.Combine(game,"TransportFever2.exe")) ||
+            !File.Exists(System.IO.Path.Combine(game,"alut_real.dll"))) return false;
+        if (Required.Any(name => !File.Exists(SafePath(game,name)))) return false;
+        // Steam can restore the stock loader while leaving the other mod files behind.
+        return Hash(SafePath(game,"alut.dll")) != Hash(System.IO.Path.Combine(game,"alut_real.dll"));
+    }
+    public Profile Installed(string game) {
+        if (State == null || !String.Equals(game,State.GameFolder,StringComparison.OrdinalIgnoreCase) || !HasModFiles(game)) return null;
+        var active = Active;
+        if (active.Files.Any(f => !File.Exists(SafePath(game,f.Path)))) return null;
+        var loader = active.Files.Single(f => String.Equals(f.Path,"alut.dll",StringComparison.OrdinalIgnoreCase));
+        return Hash(SafePath(game,loader.Path)) == loader.Sha256 ? active : null;
+    }
     public void Verify(Profile profile) {
         // Re-read the manifest as well, so edited/deleted profile data cannot bypass validation.
         profile = Load(profile.Id);
@@ -226,8 +240,9 @@ public sealed class ProfileStore {
         string original=System.IO.Path.Combine(game,"alut_real.dll");
         if(!File.Exists(original)||Hash(original)!="3DF103AE3D94A6B90C4D2A6D75DCB388CD835F5E3AF9962B22C20D4473CFC035")throw new InvalidOperationException("The original audio DLL is missing or modified. Repair the Silver base installation.");
     }
-    public void Initialize(string game, string version) {
-        if (State != null) return;
+    public void Initialize(string game, string version, bool replace = false) {
+        if (State != null && !replace) return;
+        if (RecoveryPending) throw new InvalidOperationException("Restore the interrupted installation first.");
         Guard(false);
         var current = Capture(game, "local", version, "Local installation", "Local installation. Files are backed up before installing Silver.");
         State = new ProfileState { GameFolder = game, Active = current.Id }; Save();
