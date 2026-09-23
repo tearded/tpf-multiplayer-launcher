@@ -44,7 +44,7 @@ public static class LauncherSetup {
             if(property=="ProductVersion")version=value;if(property=="UpgradeCode")upgrade=value;if(property=="ProductName")name=value;
         }
         view.Close();
-        if(version!=release.Number.ToString()||upgrade!="{80DBF679-F058-410E-9BAD-87731AC96633}"||name!="TpF2 Multiplayer")throw new InvalidDataException("MSI product metadata does not match the selected release.");
+        if(!Updater.SameVersion(version,release.Number.ToString())||upgrade!="{80DBF679-F058-410E-9BAD-87731AC96633}"||name!="TpF2 Multiplayer")throw new InvalidDataException("MSI product metadata does not match the selected release.");
     }
     public static string StageMsi(Release release,string package,string directory) {
         // Windows Installer's service can fail to open the per-user download
@@ -97,7 +97,7 @@ public static class LauncherSetup {
             if(process.ExitCode==3010)throw new InvalidOperationException("Base installation complete. Restart Windows, then reopen the launcher.");
             if(process.ExitCode!=0)throw new InvalidOperationException("Base installation incomplete ("+process.ExitCode+"). Log: "+log);
         }
-        if(Updater.RegistryValue("Version")!=release.Number.ToString()||!File.Exists(Path.Combine(game,"alut_real.dll")))throw new InvalidOperationException("Could not verify the base installation.");
+        if(!Updater.SameVersion(Updater.RegistryValue("Version"),release.Number.ToString())||!File.Exists(Path.Combine(game,"alut_real.dll")))throw new InvalidOperationException("Could not verify the base installation.");
         } finally { CleanStage(stage); }
     }
 }

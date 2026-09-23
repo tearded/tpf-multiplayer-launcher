@@ -82,7 +82,13 @@ window.launcherHistory = {
         const action = document.createElement("button");
         action.type = "button";
         action.className = "quiet-button history-install";
-        action.textContent = `Install ${entry.version}`;
+        action.textContent = entry.installable === false ? "Installation unavailable" : `Install ${entry.version}`;
+        action.disabled = entry.installable === false;
+        if (entry.installable === false) {
+          const reason = document.createElement("p");
+          reason.textContent = entry.installationIssue;
+          item.append(reason);
+        }
         action.addEventListener("click", () => install(entry));
         item.append(action);
       }

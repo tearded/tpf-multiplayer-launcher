@@ -69,7 +69,21 @@ public static class UnitTests {
         Check(Updater.IsNewer("0.6.1","v0.6.1.1"),"four-part hotfix");
         Check(!Updater.IsNewer("0.6.1.1","v0.6.1"),"no implicit downgrade");
         Check(Updater.IsNewer("0.6.1.9","v0.6.1.10"),"numeric comparison");
-        foreach(string version in new[]{"v0.6.1.1-beta","1.0","1.0.0.0.1","0.6.1.999999999999999999","1.0.0\n"})Reject(()=>Updater.ParseVersion(version),"invalid version");
+        Check(Updater.ParseVersion("v0.7").ToString()=="0.7","two-part release version preserved");
+        Check(Updater.IsNewer("0.6.1.19","v0.7"),"two-part release is newer than four-part release");
+        Check(Updater.SameVersion("0.7","0.7.0") && Updater.SameVersion("0.7","0.7.0.0"),"MSI zero padding matches release tag");
+        Check(!Updater.SameVersion("0.7","0.7.0.1") && !Updater.SameVersion("0.7","0.8.0"),"different MSI versions remain rejected");
+        var old=new Release{tag_name="v9.0.0",published_at="2026-09-21T10:00:00Z"};
+        var latest=new Release{tag_name="release-autumn",published_at="2026-09-22T10:00:00Z"};
+        var draft=new Release{tag_name="v10.0",published_at="2026-09-23T10:00:00Z",draft=true};
+        var preview=new Release{tag_name="v11.0",published_at="2026-09-23T10:00:00Z",prerelease=true};
+        Check(Updater.SelectRelease(new[]{old,draft,latest,preview},false)==latest,"latest published stable release shown regardless of tag or package");
+        Check(Updater.SelectRelease(new[]{old,latest,preview},true)==preview,"experimental selection stays separate");
+        var summary=new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(latest.Summary());
+        Check(summary.Contains("release-autumn") && summary.Contains("\"installable\":false"),"unsupported release remains visible with installation reason");
+        var missing=new Release{tag_name="v0.7",published_at="2026-09-24T10:00:00Z"};
+        Check(Updater.SelectRelease(new[]{old,missing},false)==missing && missing.InstallationIssue!=null,"missing MSI does not hide newest release");
+        foreach(string version in new[]{"v0.6.1.1-beta","1","1.0.0.0.1","0.6.1.999999999999999999","1.0.0\n"})Reject(()=>Updater.ParseVersion(version),"invalid version");
         foreach(string path in new[]{"../outside.dll","C:/Windows/file.dll","plugins/other.dll","alut_real.dll","mods/mp_lockstep_1/../other.lua","mods/mp_lockstep_1/test.lua:stream"})
             Reject(()=>ProfileStore.SafePath(Path.GetTempPath(),path),"path restriction "+path);
         Check(ProfileStore.Managed("mods/mp_lockstep_1/res/scripts/mp/net.lua"),"managed Lua");

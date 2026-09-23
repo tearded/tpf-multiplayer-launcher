@@ -59,6 +59,28 @@ const state = (running) => ({
   installed: { channel: "official", version: "0.6.1.1" },
 });
 
+test("unsupported latest release stays visible and cannot trigger installation", async () => {
+  const calls = [];
+  const release = {version: "autumn-release", notes: "Latest notes", installable: false, installationIssue: "No compatible Windows package."};
+  const ui = setup(async (_command, args) => { calls.push(args.action); return release; });
+  ui.setState(state(false), null);
+  await ui.fetchOffer();
+  assert.equal(ui.node("offered-version").textContent, "autumn-release");
+  assert.equal(ui.node("release-notes").textContent, "Latest notes");
+  assert.equal(ui.node("release-status").textContent, "Installation unavailable");
+  assert.equal(ui.node("play-current").hidden, false);
+  await ui.mainAction();
+  assert.deepEqual(calls, ["fetch"]);
+  assert.match(ui.document.querySelector(".connection-status").textContent, /No compatible Windows package/);
+});
+
+test("two-part latest version offers an update from a four-part version", () => {
+  const ui = setup(async () => null);
+  ui.setState(state(false), {version: "0.7", installable: true});
+  assert.equal(ui.node("offered-version").textContent, "0.7");
+  assert.equal(ui.node("main-action").querySelector("span").textContent, "Update & play");
+});
+
 test("closing the game unlocks updates without restarting the launcher", async () => {
   const ui = setup(async () => state(false));
   assert.equal(ui.node("main-action").disabled, true);

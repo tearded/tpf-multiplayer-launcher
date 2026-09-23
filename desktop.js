@@ -35,6 +35,7 @@ function isSilver() {
 }
 function isDowngrade() {
   if (!isSilver() || !offer) return false;
+  if (![installed.version, offer.version].every((value) => /^\d+\.\d+(?:\.\d+){0,2}$/.test(value))) return false;
   const current = installed.version.split(".").map(Number),
     next = offer.version.split(".").map(Number);
   for (let i = 0; i < 4; i++) {
@@ -64,6 +65,8 @@ function render() {
           ? "Setup required"
           : !offer
             ? "Release unavailable"
+            : offer.installable === false
+              ? "Installation unavailable"
             : same
               ? "Up to date"
               : isDowngrade()
@@ -91,6 +94,8 @@ function render() {
                 ? "Play"
                 : !offer
                   ? "Retry release check"
+                  : offer.installable === false
+                    ? "Installation unavailable"
                   : !supported
                     ? "Install multiplayer"
                     : isDowngrade()
@@ -177,6 +182,9 @@ async function fetchOffer() {
       ? `Version ${offer.version}`
       : "No release available";
     renderReleaseNotes($("release-notes"), offer?.notes);
+    if (offer?.installable === false) {
+      message(`Release ${offer.version} is available, but cannot be installed: ${offer.installationIssue}`);
+    }
   } catch (error) {
     $("news-headline").textContent = "Release unavailable";
     $("release-notes").textContent =
@@ -216,7 +224,9 @@ async function checkGame() {
             ? "Select your Transport Fever 2 game folder."
             : installed && !isSilver()
               ? "Install multiplayer to use this launcher. Your current mod files will be backed up."
-              : "Ready.",
+              : offer?.installable === false
+                ? `Release ${offer.version} cannot be installed: ${offer.installationIssue}`
+                : "Ready.",
     );
   });
 }
@@ -267,6 +277,12 @@ async function mainAction() {
   }
   if (!offer) {
     await checkGame();
+    return;
+  }
+  if (offer.installable === false) {
+    const reason = `Release ${offer.version} cannot be installed: ${offer.installationIssue}`;
+    message(reason);
+    toast(reason);
     return;
   }
   if (!isSilver() || isDowngrade() || offer.experimental) {

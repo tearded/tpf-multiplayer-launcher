@@ -68,7 +68,7 @@ public static class NativeBridge {
             case "fetch": {
                 var release=await Updater.Fetch(Channel(channel),store.ExperimentalReleases);
                 if(release==null)return null;
-                return new {version=release.Number.ToString(),notes=release.body??"No release notes available.",channel=channel,experimental=release.Experimental};
+                return release.Summary();
             }
             case "choose-folder": {
                 Updater.RequireClosed();RequireOldLauncherClosed();

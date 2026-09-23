@@ -22,7 +22,7 @@ public static class Tests {
         Check(Updater.IsNewer("0.6.1.9","v0.6.1.10"),"Hotfix numerisch vergleichen");
         Check(!Updater.IsNewer("0.6.1.1","v0.6.1.1"),"gleicher Hotfix bleibt");
         Check(!Updater.IsNewer("0.6.1.1","v0.6.1"),"kein Hotfix-Downgrade");
-        foreach(string badVersion in new[]{"0.6", "0.6.1.1.1", "v0.6.1.1-beta", "0.6.1.1\n", "0.6.1.-1", "0.6.1.999999999999999999"})
+        foreach(string badVersion in new[]{"0", "0.6.1.1.1", "v0.6.1.1-beta", "0.6.1.1\n", "0.6.1.-1", "0.6.1.999999999999999999"})
             Reject(()=>Updater.ParseVersion(badVersion),"ungueltige Releaseversion: "+badVersion.Trim());
         var release=Updater.Fetch().GetAwaiter().GetResult();Console.WriteLine("LIVE official "+release.tag_name);
         Reject(()=>Updater.Fetch("fork").GetAwaiter().GetResult(),"legacy fork downloads blocked");

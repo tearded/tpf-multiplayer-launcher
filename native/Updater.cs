@@ -31,6 +31,18 @@ public class Release {
     public bool prerelease { get; set; }
     public Asset[] assets { get; set; }
     public Version Number { get { return Updater.ParseVersion(tag_name); } }
+    public string DisplayVersion { get { return (tag_name ?? "").StartsWith("v", StringComparison.Ordinal) ? tag_name.Substring(1) : tag_name; } }
+    public string InstallationIssue {
+        get {
+            try { Validate(); return null; }
+            catch (InvalidDataException ex) { return ex.Message; }
+        }
+    }
+    public object Summary() {
+        string issue = InstallationIssue;
+        return new {version=DisplayVersion,date=published_at,notes=String.IsNullOrWhiteSpace(body)?"No release notes available.":body,
+            channel=Channel,experimental=Experimental,installable=issue==null,installationIssue=issue};
+    }
     public Asset Package {
         get {
             var matches = (assets ?? new Asset[0]).Where(a => a != null && a.name == "TpF2Multiplayer.msi").ToArray();
@@ -61,11 +73,15 @@ public static class Updater {
     public static readonly string Home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TPF2-MP", "OfficialLauncher");
     public static Version ParseVersion(string value) {
         Version parsed;
-        if (value == null || !Regex.IsMatch(value, @"\Av?[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?\z") ||
+        if (value == null || !Regex.IsMatch(value, @"\Av?[0-9]+\.[0-9]+(?:\.[0-9]+){0,2}\z") ||
             !Version.TryParse(value.TrimStart('v'), out parsed)) throw new InvalidDataException("Invalid version number.");
         return parsed;
     }
     public static bool IsNewer(string installed, string offered) { return ParseVersion(offered) > ParseVersion(installed); }
+    public static bool SameVersion(string left, string right) {
+        var a=ParseVersion(left); var b=ParseVersion(right);
+        return a.Major==b.Major && a.Minor==b.Minor && Math.Max(0,a.Build)==Math.Max(0,b.Build) && Math.Max(0,a.Revision)==Math.Max(0,b.Revision);
+    }
     public static string RegistryValue(string name) {
         foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
             using (var root = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
@@ -99,19 +115,22 @@ public static class Updater {
         var candidates = new System.Collections.Generic.List<Release>();
         for (int page=1; page<=10; page++) {
             var releases = await FetchReleasePage(page, 100);
-            candidates.AddRange(releases.Where(r => r != null && !r.draft && r.Experimental == experimental && IsNumericRelease(r)));
+            candidates.AddRange(releases);
             if (releases.Length < 100) break;
             if (page == 10) throw new InvalidDataException("Release list is too large to determine the latest version safely.");
         }
         return SelectRelease(candidates, experimental);
     }
     internal static Release SelectRelease(System.Collections.Generic.IEnumerable<Release> releases, bool experimental) {
-        var selected = releases.Where(r => r != null && !r.draft && r.Experimental == experimental && IsNumericRelease(r)).OrderByDescending(r => r.Number).FirstOrDefault();
-        if (selected != null) { selected.AllowExperimental=experimental; selected.Validate(); }
+        var selected = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
+            .OrderByDescending(r => PublishedAt(r)).FirstOrDefault();
+        if (selected != null) selected.AllowExperimental=experimental;
         return selected;
     }
-    internal static bool IsNumericRelease(Release release) {
-        try { ParseVersion(release.tag_name); return true; } catch (InvalidDataException) { return false; }
+    static DateTimeOffset PublishedAt(Release release) {
+        DateTimeOffset date;
+        return DateTimeOffset.TryParse(release.published_at, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal, out date) ? date : DateTimeOffset.MinValue;
     }
     static async Task<Release[]> FetchReleasePage(int page, int count) {
         using (var client = new HttpDownload()) {
@@ -143,8 +162,8 @@ public static class Updater {
     public static async Task<object> History(int page, bool experimental = false) {
         if (page < 1 || page > 10000) throw new InvalidDataException("Invalid history page.");
         var releases=await FetchReleasePage(page,20);
-        var entries = releases.Where(r => r != null && !r.draft && r.Experimental == experimental && IsNumericRelease(r))
-            .Select(r => new {version=r.Number.ToString(),date=r.published_at,experimental=r.Experimental,notes=String.IsNullOrWhiteSpace(r.body)?"No release notes available.":r.body}).ToArray();
+        var entries = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
+            .Select(r => { r.AllowExperimental=experimental; return r.Summary(); }).ToArray();
         return new {entries=entries,hasMore=releases.Length==20};
     }
     public static void Verify(Release release, string file) {
