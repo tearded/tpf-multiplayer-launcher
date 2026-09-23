@@ -19,7 +19,7 @@ foreach ($entry in @($releases | Where-Object { -not $_.draft -and -not $_.prere
 }
 $assets = @("release/$assetName", "release/$assetName.sig", 'release/latest.json', 'release/SHA256SUMS.txt')
 foreach ($asset in $assets) { if (-not (Test-Path -LiteralPath $asset)) { throw "Missing release asset $asset" } }
-gh release create $tag --repo $repo --verify-tag --draft --title "TPF2 Multiplayer Launcher $version" --notes-file "docs/releases/$version.md" @assets
+gh release create $tag --repo $repo --verify-tag --draft --title "$version" --notes-file "docs/releases/$version.md" @assets
 if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release' }
 $verifyDir = Join-Path $env:TEMP ('tpf2-launcher-release-' + [Guid]::NewGuid().ToString('N'))
 gh release download $tag --repo $repo --dir $verifyDir

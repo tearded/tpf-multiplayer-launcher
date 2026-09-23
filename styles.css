@@ -583,24 +583,55 @@ h2 {
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 35px;
-  font-size: 10px;
-  color: var(--muted);
-  padding: 8px 0;
-  border-top: 1px solid var(--line);
+  min-height: 48px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--panel);
+  padding: 12px 16px;
+  margin: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
   flex-wrap: wrap;
 }
 .status-dot {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--accent);
+  background: currentColor;
   flex-shrink: 0;
 }
 .connection-status {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.launch-panel .operation-status {
+  display: grid;
+  grid-template-columns: 5px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 10px;
+  margin: 18px 0 0;
+  padding: 14px 0 0;
+  min-height: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: #c7d2d5;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #ffffff18;
+  border-radius: 0;
+}
+.launch-panel .status-dot {
+  margin-top: 7px;
+  width: 5px;
+  height: 5px;
+}
+.launch-panel .operation-status progress {
+  grid-column: 2;
+  width: 100%;
+  height: 3px;
 }
 progress {
   height: 3px;
@@ -707,7 +738,10 @@ dialog p {
   border-left: 3px solid var(--accent);
   padding: 13px 18px;
   box-shadow: 0 8px 50px var(--shadow);
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  border-radius: 4px;
   max-width: min(560px, 90vw);
 }
 :root[data-theme="light"] .scene-image:after {
@@ -1063,6 +1097,8 @@ main {
 }
 .launcher-sidebar {
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
   display: flex;
   flex-direction: column;
   gap: 26px;
@@ -1149,7 +1185,6 @@ main > .files-panel .file-actions {
   margin: 0;
   gap: 12px;
 }
-.operation-status,
 .app-footer {
   color: #d5dedf;
   text-shadow: 0 1px 4px #000;
@@ -1203,10 +1238,23 @@ main > .files-panel {
   }
 }
 
-.launch-panel > .check-updates {
-  width: 100%;
-  justify-content: center;
-  margin: -4px 0 20px;
+.installation-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+body .launch-panel .installation-tools .check-updates {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  flex-shrink: 0;
+}
+body .launch-panel .installation-tools .check-updates:hover {
+  background: #a7b9c322;
 }
 
 /* Readable controls over the original city image. */
@@ -1235,6 +1283,10 @@ main > .files-panel {
   color: var(--text);
   border-color: #ffffffb3;
   box-shadow: 0 16px 48px #12243433;
+}
+:root[data-theme="light"] .launch-panel .operation-status {
+  color: var(--text);
+  border-color: var(--line);
 }
 :root[data-theme="light"]
   .launch-panel

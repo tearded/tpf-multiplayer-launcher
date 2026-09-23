@@ -48,13 +48,15 @@ public static class Tests {
         var store=new ProfileStore(Path.Combine(root,"store"),false);store.Initialize(game,"0.4.19");
         var initial=store.Active;Check(initial.Channel=="local"&&store.State.Fork==null,"lokale Entwicklung ist kein Fork-Release");
         // Legacy profile fixture for migration/rollback, never downloaded or offered.
-        foreach(string relative in new[]{"tpf2mp_version.txt","plugins/tpf2_workshop_register.dll"}) {
+        foreach(string relative in new[]{"tpf2mp_version.txt","plugins/tpf2_workshop_register.dll","plugins/tpf2_bigmap.dll","plugins/tpf2_bigmap.cfg"}) {
             string file=ProfileStore.SafePath(game,relative);if(File.Exists(file))File.Delete(file);
         }
         var publishedFork=store.Capture(game,"fork","0.4.30","Legacy backup fixture","");
         var official=store.PrepareRelease(release,p=>{}).GetAwaiter().GetResult();
         Check(official.Channel=="official"&&official.PackageHash==digest,"offizielles MSI vollständig isoliert entpackt");
         store.Activate(official);Check(store.Matches(official,game),"Wechsel zum offiziellen Release alle Dateihashes");
+        foreach(string component in new[]{"plugins/tpf2_bigmap.dll","plugins/tpf2_bigmap.cfg"})
+            Check(official.Files.Any(f=>f.Path==component)&&File.Exists(ProfileStore.SafePath(game,component)),"Big Maps aus echtem MSI installiert: "+component);
         string versionMarker=Path.Combine(game,"tpf2mp_version.txt");
         string workshopPlugin=Path.Combine(game,"plugins","tpf2_workshop_register.dll");
         Check(official.Files.Any(f=>f.Path=="tpf2mp_version.txt")&&File.ReadAllText(versionMarker).Trim()==release.Number.ToString(),"offizielle Versionsdatei vollständig geprüft und installiert");
@@ -62,6 +64,7 @@ public static class Tests {
         bool markerFailed=false;try{store.Activate(publishedFork,n=>{if(!File.Exists(versionMarker))throw new IOException("Injected failure after version marker removal");});}catch(IOException){markerFailed=true;}
         Check(markerFailed&&store.Matches(official,game)&&File.ReadAllText(versionMarker).Trim()==release.Number.ToString()&&File.Exists(workshopPlugin),"Rollback stellt entfernte Versionsdatei und Workshop-Plugin vollständig wieder her");
         store.Activate(publishedFork);
+        Check(!File.Exists(Path.Combine(game,"plugins","tpf2_bigmap.dll"))&&!File.Exists(Path.Combine(game,"plugins","tpf2_bigmap.cfg")),"älterer Stand entfernt beide Big-Maps-Komponenten");
         Check(!File.Exists(versionMarker)&&!File.Exists(workshopPlugin)&&store.Matches(publishedFork,game),"Rückwechsel zum älteren Fork entfernt Versionsdatei und Workshop-Plugin");
         store.Activate(official);
         Check(ProfileStore.Hash(Path.Combine(game,"plugins","tpf2_previews.dll"))==official.Files.Single(f=>f.Path=="plugins/tpf2_previews.dll").Sha256,"offizielle Vorschau-DLL ersetzt Fork-Version");

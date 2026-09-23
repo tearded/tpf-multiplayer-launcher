@@ -13,6 +13,20 @@ public static class UnitTests {
         }
         string sentinel=Path.Combine(game,"netpunch","user-data.txt");File.WriteAllText(sentinel,"preserve");
         var store=new ProfileStore(Path.Combine(root,"store"),false);store.Initialize(game,"0.6.2.10");var single=store.Active;
+        string bigmapDll=ProfileStore.SafePath(game,"plugins/tpf2_bigmap.dll");
+        string bigmapCfg=ProfileStore.SafePath(game,"plugins/tpf2_bigmap.cfg");
+        Directory.CreateDirectory(Path.GetDirectoryName(bigmapDll));
+        File.WriteAllText(bigmapDll,"big maps DLL");File.WriteAllText(bigmapCfg,"big maps settings");
+        string otherPlugin=Path.Combine(game,"plugins","unrelated.cfg");File.WriteAllText(otherPlugin,"preserve");
+        var bigmap=store.Capture(game,"official","0.7","Big Maps fixture","");
+        Check(bigmap.Files.Any(f=>f.Path=="plugins/tpf2_bigmap.dll")&&bigmap.Files.Any(f=>f.Path=="plugins/tpf2_bigmap.cfg"),"Big Maps DLL and config are backed up and hashed");
+        store.Activate(bigmap);store.Activate(single);
+        Check(!File.Exists(bigmapDll)&&!File.Exists(bigmapCfg),"older release removes both Big Maps components");
+        store.Activate(bigmap);
+        bool bigmapFailed=false;try{store.Activate(single,n=>{if(!File.Exists(bigmapCfg))throw new IOException("fixture Big Maps removal fault");});}catch(IOException){bigmapFailed=true;}
+        Check(bigmapFailed&&store.Matches(bigmap,game)&&File.ReadAllText(bigmapCfg)=="big maps settings"&&File.Exists(bigmapDll),"rollback restores Big Maps DLL and configuration");
+        Check(File.ReadAllText(otherPlugin)=="preserve"&&!ProfileStore.Managed("plugins/unrelated.cfg"),"unrelated plugin files stay protected");
+        store.Activate(single);
         string relative="netpunch/_internal/api-ms-win-core-console-l1-1-0.dll";
         string runtime=ProfileStore.SafePath(game,relative);Directory.CreateDirectory(Path.GetDirectoryName(runtime));File.WriteAllText(runtime,"runtime fixture");
         string nested=ProfileStore.SafePath(game,"netpunch/_internal/package/data.bin");Directory.CreateDirectory(Path.GetDirectoryName(nested));File.WriteAllText(nested,"nested data");

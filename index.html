@@ -156,7 +156,13 @@
             <section class="launch-panel" aria-labelledby="installation-title">
               <div class="section-heading">
                 <h2 id="installation-title">Installation</h2>
-                <span class="status-pill" id="release-status">Checking</span>
+                <div class="installation-tools">
+                  <span class="status-pill" id="release-status">Checking</span>
+                  <button class="icon-button check-updates" id="check-game"
+                    aria-label="Check for multiplayer updates" title="Check for multiplayer updates">
+                    <svg aria-hidden="true"><use href="#refresh" /></svg>
+                  </button>
+                </div>
               </div>
               <dl class="version-list">
                 <div>
@@ -168,15 +174,6 @@
                   <dd id="offered-version">—</dd>
                 </div>
               </dl>
-              <button
-                class="quiet-button check-updates"
-                id="check-game"
-                aria-label="Check for multiplayer updates"
-                title="Check for multiplayer updates"
-              >
-                <svg aria-hidden="true"><use href="#refresh" /></svg>
-                <span>Check for updates</span>
-              </button>
               <div class="launch-actions">
                 <button class="primary-button" id="main-action" disabled>
                   <svg aria-hidden="true"><use href="#download" /></svg
@@ -192,6 +189,11 @@
                   <svg aria-hidden="true"><use href="#play" /></svg>Play
                   installed version
                 </button>
+              </div>
+              <div class="operation-status" role="status" aria-live="polite" aria-atomic="true">
+                <span class="status-dot" aria-hidden="true"></span>
+                <span class="connection-status">Checking installation…</span>
+                <progress id="operation-progress" aria-label="Installation progress" hidden></progress>
               </div>
               <p class="session-note">
                 Everyone in your session needs the same mod version.
@@ -220,15 +222,6 @@
             </button>
           </div>
         </section>
-        <div class="operation-status" role="status">
-          <span class="status-dot" aria-hidden="true"></span
-          ><span class="connection-status">Checking installation…</span
-          ><progress
-            id="operation-progress"
-            aria-label="Installation progress"
-            hidden
-          ></progress>
-        </div>
       </main>
       <footer class="app-footer">
         <span>Unofficial launcher <span class="footer-version"></span></span>

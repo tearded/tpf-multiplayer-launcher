@@ -37,7 +37,7 @@ public sealed class ProfileStore {
     public readonly string Root;
     public ProfileState State;
     readonly bool live;
-    static readonly string[] Core = { "alut.dll", "tpf2_pluginhost.dll", "tpf2_bridge_mp.dll", "tpf2_slice.dll", "tpf2_menu.dll", "tpf2_slice.cfg", "tpf2mp_version.txt", "netpunch/netpunch.exe", "plugins/tpf2_previews.dll", "plugins/tpf2_workshop_register.dll" };
+    static readonly string[] Core = { "alut.dll", "tpf2_pluginhost.dll", "tpf2_bridge_mp.dll", "tpf2_slice.dll", "tpf2_menu.dll", "tpf2_slice.cfg", "tpf2mp_version.txt", "netpunch/netpunch.exe", "plugins/tpf2_previews.dll", "plugins/tpf2_workshop_register.dll", "plugins/tpf2_bigmap.dll", "plugins/tpf2_bigmap.cfg" };
     static readonly string[] Required = { "alut.dll", "tpf2_pluginhost.dll", "tpf2_bridge_mp.dll", "tpf2_slice.dll", "tpf2_menu.dll", "netpunch/netpunch.exe", "mods/mp_lockstep_1/mod.lua", "mods/mp_lockstep_1/res/config/game_script/lockstep.lua", "mods/mp_lockstep_1/res/scripts/mp/net.lua" };
     string StateFile { get { return System.IO.Path.Combine(Root, "profiles.json"); } }
     string JournalFile { get { return System.IO.Path.Combine(Root, "switch-pending.json"); } }
