@@ -129,25 +129,6 @@ svg {
 .brand {
   display: flex;
   align-items: center;
-  gap: 13px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-.brand > svg {
-  width: 34px;
-  height: 38px;
-  padding: 7px;
-  background: var(--accent);
-  color: #17201d;
-  box-shadow: 4px 4px 0 #ffffff15;
-}
-.brand-divider {
-  color: #b9c5c8;
-  margin: 0 10px;
-}
-.brand strong {
-  font-weight: 600;
 }
 .header-actions {
   display: flex;
@@ -252,6 +233,17 @@ h1 {
   line-height: 1.05;
   white-space: nowrap;
   text-shadow: 0 4px 32px #05121c40;
+}
+.banner-wordmark {
+  display: block;
+  width: min(100%, 440px);
+  height: auto;
+  filter: drop-shadow(0 6px 28px #05121c80);
+}
+@media (max-height: 850px) and (min-width: 801px) {
+  .banner-wordmark {
+    width: min(100%, 360px);
+  }
 }
 .banner-caption {
   display: flex;
@@ -844,12 +836,6 @@ dialog p {
   h1 {
     font-size: clamp(32px, 16cqw, 120px);
   }
-  .brand {
-    font-size: 11px;
-  }
-  .brand-divider {
-    margin: 0 6px;
-  }
   .header-actions {
     gap: 7px;
   }
@@ -875,20 +861,6 @@ dialog p {
   }
   .app-header {
     height: 76px;
-  }
-  .brand > span {
-    font-size: 10px;
-  }
-  .brand-divider {
-    display: none;
-  }
-  .brand strong {
-    display: block;
-    font-size: 10px;
-  }
-  .brand > svg {
-    width: 30px;
-    height: 34px;
   }
   .header-actions {
     gap: 3px;

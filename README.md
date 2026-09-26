@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/images/launcher-logo.svg" width="80" height="80" alt="Silver train logo">
+  <img src="public/images/launcher-logo.png" width="80" height="80" alt="TF2 MP logo">
   <h1>TPF2 Multiplayer Launcher</h1>
   <p>Install, update and play <a href="https://github.com/silver2127/tpf2-multiplayer">Silver’s multiplayer mod</a> for Transport Fever 2.</p>
   <p>
@@ -12,9 +12,9 @@
   <p><sub>Windows 10 / 11 · 64-bit · English</sub></p>
 </div>
 
-![Launcher 1.0.0 preview with a launcher update notification, installation controls and game folder bar over a full-width Transport Fever 2 city background](docs/images/launcher-preview.jpg)
+![Launcher 1.1.0 preview with the Transport Fever 2 Multiplayer wordmark, a launcher update notification, installation controls and game folder bar over a full-width Transport Fever 2 city background](docs/images/launcher-preview.jpg)
 
-<p align="center"><sub>Version 1.0.0 browser preview with sample data and a simulated launcher update to 1.0.1. Release notes and mod versions are examples; the desktop launcher displays the original GitHub release text. City image © Urban Games.</sub></p>
+<p align="center"><sub>Version 1.1.0 browser preview with sample data and a simulated launcher update to 1.1.1. Release notes and mod versions are examples; the desktop launcher displays the original GitHub release text. City image © Urban Games.</sub></p>
 
 ## Get in game
 

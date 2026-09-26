@@ -40,17 +40,17 @@ Everyone in your session needs **the same mod version**.
 
 document.querySelector(".connection-status").textContent =
   "Preview · sample installation, no files will be changed";
-document.querySelector(".footer-version").textContent = "v1.0.0";
+document.querySelector(".footer-version").textContent = "v1.1.0";
 $("launcher-update-copy").textContent =
   "Preview only. The desktop app checks for signed launcher updates on startup.";
 if (new URLSearchParams(window.location.search).has("launcher-update")) {
   const badge = $("launcher-update-badge");
   if (badge) {
-    badge.textContent = "Launcher update · v1.0.1";
+    badge.textContent = "Launcher update · v1.1.1";
     badge.hidden = false;
   }
   $("launcher-update-copy").textContent =
-    "Preview only · Version 1.0.1 is available. Close the game before installing.";
+    "Preview only · Version 1.1.1 is available. Close the game before installing.";
 }
 for (const id of ["open-settings", "launcher-info", "launcher-update-badge"])
   $(id)?.addEventListener("click", () => $("settings-dialog").showModal());
