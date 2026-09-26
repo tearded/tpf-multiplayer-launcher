@@ -191,6 +191,40 @@ public static class UnitTests {
         Reject(()=>Updater.FetchVersion("0.6.1-beta").GetAwaiter().GetResult(),"non-numeric tag rejected before network access");
         release.draft=true;Reject(()=>release.Validate(),"draft blocked");release.draft=false;
         asset.browser_download_url="https://example.com/TpF2Multiplayer.msi";Reject(()=>release.Validate(),"foreign source blocked");
+        PackageRepository();
         Console.WriteLine("PASS total="+count);
+    }
+    // Silver 0.7.0.6+: the MSI is in the packages repository's release with the same tag.
+    static void PackageRepository(){
+        Func<string,string,Asset> msi=(repo,tag)=>new Asset{name="TpF2Multiplayer.msi",size=1,digest="sha256:"+new string('b',64),
+            browser_download_url="https://github.com/"+repo+"/releases/download/"+tag+"/TpF2Multiplayer.msi"};
+        var launchers=new Asset{name="TpF2Multiplayer-Launcher-Windows-Setup.exe",size=1,digest="sha256:"+new string('c',64),
+            browser_download_url="https://github.com/silver2127/tpf2-multiplayer/releases/download/v0.7.0.6/TpF2Multiplayer-Launcher-Windows-Setup.exe"};
+        var release=new Release{tag_name="v0.7.0.6",assets=new[]{launchers}};
+        Check(release.InstallationIssue!=null,"a launcher-only release has no MSI of its own");
+        var packages=new System.Collections.Generic.Dictionary<string,Release>{
+            {"v0.7.0.6",new Release{tag_name="v0.7.0.6",assets=new[]{msi(Updater.PackageRepository,"v0.7.0.6")}}}};
+        Updater.UsePackages(release,packages);
+        release.Validate();Check(release.PackageSource==Updater.PackageRepository,"MSI taken from the packages release with the same tag");
+        var mixed=new Release{tag_name="v0.7.0.6",assets=new[]{msi(Updater.PackageRepository,"v0.7.0.6")}};
+        Reject(()=>mixed.Validate(),"a packages URL is rejected on a release whose source is the mod repository");
+        var other=new Release{tag_name="v0.7.0.6",assets=new[]{msi("tearded/tpf2-multiplayer-packages","v0.7.0.6")},PackageSource="tearded/tpf2-multiplayer-packages"};
+        Reject(()=>other.Validate(),"only the two known repositories are sources");
+        var wrongTag=new Release{tag_name="v0.7.0.6",assets=new[]{msi(Updater.PackageRepository,"v0.7.0.5")},PackageSource=Updater.PackageRepository};
+        Reject(()=>wrongTag.Validate(),"a packages MSI of another tag is rejected");
+        var old=new Release{tag_name="v0.7.0.5",assets=new[]{msi(Updater.Repository,"v0.7.0.5")}};
+        Updater.UsePackages(old,packages);
+        old.Validate();Check(old.PackageSource==Updater.Repository,"0.7.0.5 and older keep their own MSI");
+        var draft=new Release{tag_name="v0.7.0.7",assets=new[]{launchers}};
+        Updater.UsePackages(draft,new System.Collections.Generic.Dictionary<string,Release>{
+            {"v0.7.0.7",new Release{tag_name="v0.7.0.7",draft=true,assets=new[]{msi(Updater.PackageRepository,"v0.7.0.7")}}}});
+        Check(draft.PackageSource==Updater.Repository&&draft.InstallationIssue!=null,"a draft packages release is not used");
+        var empty=new Release{tag_name="v0.7.0.8",assets=new[]{launchers}};
+        Updater.UsePackages(empty,new System.Collections.Generic.Dictionary<string,Release>{{"v0.7.0.8",new Release{tag_name="v0.7.0.8",assets=new Asset[0]}}});
+        Check(empty.PackageSource==Updater.Repository,"an empty packages release is not used");
+        var mod=new Release{tag_name="v0.7.0.6",published_at="2026-09-27T10:00:00Z"};
+        var launcherUpdate=new Release{tag_name="launcher-v1.2.0",name="Launcher 1.2.0",published_at="2026-09-28T10:00:00Z"};
+        Check(Updater.SelectRelease(new[]{mod,launcherUpdate},false)==mod,"a newer launcher-v* release is not offered as a mod version");
+        Check(Updater.SelectRelease(new[]{launcherUpdate},false)==null&&Updater.SelectRelease(new[]{launcherUpdate},true)==null,"launcher releases appear on neither track");
     }
 }
