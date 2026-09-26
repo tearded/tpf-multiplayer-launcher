@@ -19,8 +19,6 @@ public class Asset {
     public long size { get; set; }
 }
 public class Release {
-    [ScriptIgnore] public string Repository = "silver2127/tpf2-multiplayer";
-    [ScriptIgnore] public string Channel { get { return Repository == "silver2127/tpf2-multiplayer" ? "official" : "fork"; } }
     public string tag_name { get; set; }
     public string name { get; set; }
     [ScriptIgnore] public bool AllowExperimental;
@@ -41,7 +39,7 @@ public class Release {
     public object Summary() {
         string issue = InstallationIssue;
         return new {version=DisplayVersion,date=published_at,notes=String.IsNullOrWhiteSpace(body)?"No release notes available.":body,
-            channel=Channel,experimental=Experimental,installable=issue==null,installationIssue=issue};
+            experimental=Experimental,installable=issue==null,installationIssue=issue};
     }
     public Asset Package {
         get {
@@ -51,9 +49,9 @@ public class Release {
         }
     }
     public void Validate() {
-        if (draft || (Experimental && !AllowExperimental) || Number == null || Repository != "silver2127/tpf2-multiplayer") throw new InvalidDataException("This is not a supported stable Silver release.");
+        if (draft || (Experimental && !AllowExperimental) || Number == null) throw new InvalidDataException("This is not a supported stable Silver release.");
         var asset = Package;
-        if (asset.browser_download_url != "https://github.com/" + Repository + "/releases/download/" + tag_name + "/TpF2Multiplayer.msi" ||
+        if (asset.browser_download_url != "https://github.com/" + Updater.Repository + "/releases/download/" + tag_name + "/TpF2Multiplayer.msi" ||
             asset.digest == null || !Regex.IsMatch(asset.digest, @"\Asha256:[0-9a-fA-F]{64}\z") || asset.size <= 0 || asset.size > 536870912)
             throw new InvalidDataException("The download URL, size or SHA-256 checksum is missing or invalid.");
     }
@@ -69,8 +67,12 @@ public sealed class HttpDownload : WebClient {
     }
 }
 public static class Updater {
-    public const string Feed = "https://api.github.com/repos/silver2127/tpf2-multiplayer/releases/latest";
-    public static readonly string Home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TPF2-MP", "OfficialLauncher");
+    // The only release source; the launcher never installs builds from other repositories.
+    public const string Repository = "silver2127/tpf2-multiplayer";
+    // An elevated helper may run as a different Windows account; it then receives
+    // the invoking user's local data folder instead of using its own.
+    public static string LocalData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    public static string Home { get { return Path.Combine(LocalData, "TPF2-MP", "OfficialLauncher"); } }
     public static Version ParseVersion(string value) {
         Version parsed;
         if (value == null || !Regex.IsMatch(value, @"\Av?[0-9]+\.[0-9]+(?:\.[0-9]+){0,2}\z") ||
@@ -107,11 +109,7 @@ public static class Updater {
             if(!String.IsNullOrWhiteSpace(folder)&&File.Exists(Path.Combine(folder,"TransportFever2.exe")))return Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
         throw new InvalidOperationException("Game folder not found. Use Select game folder.");
     }
-    public static async Task<Release> Fetch() {
-        return await Fetch("official");
-    }
-    public static async Task<Release> Fetch(string channel, bool experimental = false) {
-        if (channel != "official") throw new InvalidDataException("Only Silver releases are supported.");
+    public static async Task<Release> Fetch(bool experimental = false) {
         var candidates = new System.Collections.Generic.List<Release>();
         for (int page=1; page<=10; page++) {
             var releases = await FetchReleasePage(page, 100);
@@ -134,7 +132,7 @@ public static class Updater {
     }
     static async Task<Release[]> FetchReleasePage(int page, int count) {
         using (var client = new HttpDownload()) {
-            var job=client.DownloadStringTaskAsync("https://api.github.com/repos/silver2127/tpf2-multiplayer/releases?per_page="+count+"&page="+page);
+            var job=client.DownloadStringTaskAsync("https://api.github.com/repos/" + Repository + "/releases?per_page="+count+"&page="+page);
             if(await Task.WhenAny(job,Task.Delay(45000))!=job){client.CancelAsync();throw new TimeoutException("GitHub did not respond. Try again later.");}
             var releases=new JavaScriptSerializer{MaxJsonLength=8388608}.Deserialize<Release[]>(await job);
             if(releases==null)throw new InvalidDataException("Empty response from GitHub.");
@@ -146,7 +144,7 @@ public static class Updater {
         foreach (string tag in new[] {"v" + version, version}) {
             using (var client = new HttpDownload()) {
                 try {
-                    var job = client.DownloadStringTaskAsync("https://api.github.com/repos/silver2127/tpf2-multiplayer/releases/tags/" + tag);
+                    var job = client.DownloadStringTaskAsync("https://api.github.com/repos/" + Repository + "/releases/tags/" + tag);
                     if (await Task.WhenAny(job, Task.Delay(45000)) != job) { client.CancelAsync(); throw new TimeoutException("GitHub did not respond. Try again later."); }
                     var release = new JavaScriptSerializer().Deserialize<Release>(await job);
                     if (release == null || release.Number.ToString() != version) throw new InvalidDataException("The requested release does not match.");
@@ -182,7 +180,8 @@ public static class Updater {
         string partial = file + "." + Guid.NewGuid().ToString("N") + ".part";
         try {
             using (var client = new HttpDownload()) {
-                client.DownloadProgressChanged += (s, e) => progress(e.ProgressPercentage);
+                int reported = -1;
+                client.DownloadProgressChanged += (s, e) => { if (e.ProgressPercentage != reported) { reported = e.ProgressPercentage; progress(reported); } };
                 var job = client.DownloadFileTaskAsync(release.Package.browser_download_url, partial);
                 if (await Task.WhenAny(job, Task.Delay(600000)) != job) { client.CancelAsync(); throw new TimeoutException("Download timed out."); }
                 await job;

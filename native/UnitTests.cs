@@ -92,9 +92,9 @@ public static class UnitTests {
         string journal=Path.Combine(store.Root,"switch-pending.json");
         ProfileStore.Write(journal,new SwitchJournal{Previous=store.State,Restore=snapshots[0].Id});
         store.PruneBackups();Check(Directory.GetDirectories(profiles).Length==before,"pending recovery prevents all cleanup");File.Delete(journal);
-        store.State.Fork=snapshots[0].Id;store.Save();
+        store.State.Official=snapshots[0].Id;store.Save();
         store.PruneBackups();
-        Check(store.State.Fork==null,"legacy cached reference does not retain old backups forever");
+        Check(store.State.Official==null,"cached release reference does not retain old backups forever");
         Check(Directory.GetDirectories(profiles).Length==3,"one historical backup plus active profile and unmanaged folder");
         Check(Directory.Exists(Path.Combine(profiles,snapshots[3].Id))&&!Directory.Exists(Path.Combine(profiles,snapshots[0].Id)),"newest backup kept and oldest removed");
         store.Verify(store.Active);Check(true,"active profile survives cleanup");
@@ -111,6 +111,10 @@ public static class UnitTests {
         Directory.CreateDirectory(Path.Combine(stage,"nested"));File.WriteAllText(Path.Combine(stage,"nested","fixture"),"temporary");
         LauncherSetup.CleanStage(stage);Check(!Directory.Exists(stage),"owned extraction directory removed");
         LauncherSetup.CleanStage(root);Check(Directory.Exists(root),"cleanup rejects unrelated temp directory");
+        var holder=new System.Threading.Thread(()=>new System.Threading.Mutex(false,@"Local\TPF2ReleaseProfileMutation").WaitOne());
+        holder.Start();holder.Join();
+        var current=store.Active;store.Activate(current);
+        Check(store.Matches(current,game),"installation proceeds after a crashed helper abandoned the lock");
         Console.WriteLine("Runtime fixtures: "+root);
     }
     public static void Main(){
@@ -139,17 +143,21 @@ public static class UnitTests {
         Check(ProfileStore.Managed("plugins/tpf2_workshop_register.dll"),"managed workshop plugin");
         foreach(string path in new[]{"netpunch/_internal/../outside.dll","netpunch/_internal/file.dll:stream","netpunch/_internal-other/file.dll","netpunch/user-data.txt","netpunch/_internal/pkg/../../outside.dll"})
             Reject(()=>ProfileStore.SafePath(Path.GetTempPath(),path),"runtime path restriction "+path);
-        Reject(()=>LauncherSetup.RequireSilver(new Profile{Channel="fork"}),"manual legacy activation blocked");
+        var saved=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<ProfileState>("{\"GameFolder\":\"game\",\"Active\":\"a\",\"Official\":null,\"Fork\":null}");
+        Check(saved.Active=="a"&&saved.GameFolder=="game","state files from launcher 1.0.x with a Fork entry still load");
         Reject(()=>LauncherSetup.RequireSilver(new Profile{Channel="local"}),"manual local activation blocked");
         RuntimeProfiles();
+        string data=Path.Combine(Path.GetTempPath(),"tpf2-data-test-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(data,"TPF2-MP","OfficialLauncher"));
+        Reject(()=>LauncherSetup.ElevatedDataFolder(data),"elevated helper rejects a data folder without launcher state");
+        File.WriteAllText(Path.Combine(data,"TPF2-MP","OfficialLauncher","profiles.json"),"{}");
+        Check(LauncherSetup.ElevatedDataFolder(data)==data,"elevated helper uses the invoking user's data folder");
+        foreach(string value in new[]{null,"","relative",@"\\server\share",Path.Combine(data,"..",Path.GetFileName(data))})
+            Reject(()=>LauncherSetup.ElevatedDataFolder(value),"elevated data folder restriction "+value);
         var asset=new Asset{name="TpF2Multiplayer.msi",size=1,digest="sha256:"+new string('a',64),browser_download_url="https://github.com/silver2127/tpf2-multiplayer/releases/download/v0.6.1.1/TpF2Multiplayer.msi"};
         var release=new Release{tag_name="v0.6.1.1",assets=new[]{asset}};release.Validate();Check(true,"valid fixed source");
-        release.Repository="tearded/tpf2-multiplayer";
         asset.browser_download_url="https://github.com/tearded/tpf2-multiplayer/releases/download/v0.6.1.1/TpF2Multiplayer.msi";
-        Reject(()=>release.Validate(),"community release rejected even with a matching asset URL");
-        Reject(()=>Updater.Fetch("fork").GetAwaiter().GetResult(),"legacy fork feed rejected before network access");
-        Reject(()=>Updater.Fetch("community").GetAwaiter().GetResult(),"community feed rejected before network access");
-        release.Repository="silver2127/tpf2-multiplayer";
+        Reject(()=>release.Validate(),"package from another repository rejected");
         asset.browser_download_url="https://github.com/silver2127/tpf2-multiplayer/releases/download/v0.6.1.1/TpF2Multiplayer.msi";
         release.prerelease=true;Reject(()=>release.Validate(),"prerelease blocked by default");
         release.AllowExperimental=true;release.Validate();Check(true,"explicit experimental selection allows verified prerelease");

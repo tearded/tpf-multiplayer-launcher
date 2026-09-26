@@ -25,15 +25,13 @@ public static class Tests {
         foreach(string badVersion in new[]{"0", "0.6.1.1.1", "v0.6.1.1-beta", "0.6.1.1\n", "0.6.1.-1", "0.6.1.999999999999999999"})
             Reject(()=>Updater.ParseVersion(badVersion),"ungueltige Releaseversion: "+badVersion.Trim());
         var release=Updater.Fetch().GetAwaiter().GetResult();Console.WriteLine("LIVE official "+release.tag_name);
-        Reject(()=>Updater.Fetch("fork").GetAwaiter().GetResult(),"legacy fork downloads blocked");
         var asset=release.Package;string digest=asset.digest,url=asset.browser_download_url;
         release.draft=true;Reject(()=>release.Validate(),"kein Entwurf");release.draft=false;
         release.prerelease=true;Reject(()=>release.Validate(),"keine prerelease-Metadaten");release.prerelease=false;
         asset.digest=null;Reject(()=>release.Validate(),"fehlender Hash");asset.digest=digest;
         asset.browser_download_url="https://example.com/TpF2Multiplayer.msi";Reject(()=>release.Validate(),"fremde Downloadquelle");asset.browser_download_url=url;
-        release.Repository="tearded/tpf2-multiplayer";Reject(()=>release.Validate(),"offizielles Asset nicht als Fork-Download akzeptiert");
-        asset.browser_download_url="https://github.com/tearded/tpf2-multiplayer/releases/download/"+release.tag_name+"/TpF2Multiplayer.msi";Reject(()=>release.Validate(),"community release rejected even with matching metadata");
-        release.Repository="silver2127/tpf2-multiplayer";asset.browser_download_url=url;
+        asset.browser_download_url="https://github.com/tearded/tpf2-multiplayer/releases/download/"+release.tag_name+"/TpF2Multiplayer.msi";Reject(()=>release.Validate(),"Paket aus anderem Repository abgewiesen");
+        asset.browser_download_url=url;
         string package=Updater.Download(release,p=>{}).GetAwaiter().GetResult();Updater.Verify(release,package);Check(true,"echter Release-Download Größe und SHA-256");
         asset.digest="sha256:"+new String('0',64);Reject(()=>Updater.Verify(release,package),"manipulierter Hash");asset.digest=digest;
         asset.size++;Reject(()=>Updater.Verify(release,package),"falsche Dateigröße");asset.size--;
@@ -46,12 +44,12 @@ public static class Tests {
         Directory.CreateDirectory(Path.Combine(game,"plugins"));File.WriteAllText(Path.Combine(game,"plugins","unrelated.dll"),"other plugin sentinel");
         Directory.CreateDirectory(Path.Combine(game,"mods","other_mod"));File.WriteAllText(Path.Combine(game,"mods","other_mod","mod.lua"),"other mod sentinel");
         var store=new ProfileStore(Path.Combine(root,"store"),false);store.Initialize(game,"0.4.19");
-        var initial=store.Active;Check(initial.Channel=="local"&&store.State.Fork==null,"lokale Entwicklung ist kein Fork-Release");
-        // Legacy profile fixture for migration/rollback, never downloaded or offered.
+        var initial=store.Active;Check(initial.Channel=="local"&&store.State.Official==null,"lokale Installation ist kein Silver-Release");
+        // Older local build fixture for rollback, never downloaded or offered.
         foreach(string relative in new[]{"tpf2mp_version.txt","plugins/tpf2_workshop_register.dll","plugins/tpf2_bigmap.dll","plugins/tpf2_bigmap.cfg"}) {
             string file=ProfileStore.SafePath(game,relative);if(File.Exists(file))File.Delete(file);
         }
-        var publishedFork=store.Capture(game,"fork","0.4.30","Legacy backup fixture","");
+        var olderBuild=store.Capture(game,"local","0.4.30","Older build fixture","");
         var official=store.PrepareRelease(release,p=>{}).GetAwaiter().GetResult();
         Check(official.Channel=="official"&&official.PackageHash==digest,"offizielles MSI vollständig isoliert entpackt");
         store.Activate(official);Check(store.Matches(official,game),"Wechsel zum offiziellen Release alle Dateihashes");
@@ -61,35 +59,35 @@ public static class Tests {
         string workshopPlugin=Path.Combine(game,"plugins","tpf2_workshop_register.dll");
         Check(official.Files.Any(f=>f.Path=="tpf2mp_version.txt")&&File.ReadAllText(versionMarker).Trim()==release.Number.ToString(),"offizielle Versionsdatei vollständig geprüft und installiert");
         Check(official.Files.Any(f=>f.Path=="plugins/tpf2_workshop_register.dll")&&File.Exists(workshopPlugin),"offizielles Workshop-Plugin vollständig geprüft und installiert");
-        bool markerFailed=false;try{store.Activate(publishedFork,n=>{if(!File.Exists(versionMarker))throw new IOException("Injected failure after version marker removal");});}catch(IOException){markerFailed=true;}
+        bool markerFailed=false;try{store.Activate(olderBuild,n=>{if(!File.Exists(versionMarker))throw new IOException("Injected failure after version marker removal");});}catch(IOException){markerFailed=true;}
         Check(markerFailed&&store.Matches(official,game)&&File.ReadAllText(versionMarker).Trim()==release.Number.ToString()&&File.Exists(workshopPlugin),"Rollback stellt entfernte Versionsdatei und Workshop-Plugin vollständig wieder her");
-        store.Activate(publishedFork);
+        store.Activate(olderBuild);
         Check(!File.Exists(Path.Combine(game,"plugins","tpf2_bigmap.dll"))&&!File.Exists(Path.Combine(game,"plugins","tpf2_bigmap.cfg")),"älterer Stand entfernt beide Big-Maps-Komponenten");
-        Check(!File.Exists(versionMarker)&&!File.Exists(workshopPlugin)&&store.Matches(publishedFork,game),"Rückwechsel zum älteren Fork entfernt Versionsdatei und Workshop-Plugin");
+        Check(!File.Exists(versionMarker)&&!File.Exists(workshopPlugin)&&store.Matches(olderBuild,game),"Rückwechsel zum älteren Stand entfernt Versionsdatei und Workshop-Plugin");
         store.Activate(official);
-        Check(ProfileStore.Hash(Path.Combine(game,"plugins","tpf2_previews.dll"))==official.Files.Single(f=>f.Path=="plugins/tpf2_previews.dll").Sha256,"offizielle Vorschau-DLL ersetzt Fork-Version");
-        Check(!File.Exists(Path.Combine(game,"mods","mp_lockstep_1","res","scripts","mp","navigation.lua")),"Fork-Zusatzmodul beim offiziellen Stand entfernt");
+        Check(ProfileStore.Hash(Path.Combine(game,"plugins","tpf2_previews.dll"))==official.Files.Single(f=>f.Path=="plugins/tpf2_previews.dll").Sha256,"offizielle Vorschau-DLL ersetzt ältere Version");
+        Check(!File.Exists(Path.Combine(game,"mods","mp_lockstep_1","res","scripts","mp","navigation.lua")),"Zusatzmodul des älteren Stands beim offiziellen Stand entfernt");
         store.Activate(initial);Check(store.Matches(initial,game),"vollständiger Rückwechsel inklusive Vorschau-Integration");
-        var futureFork=store.Capture(game,"fork","0.4.19","TEST FIXTURE","Synthetic released fork payload; not published.");
-        store.Activate(futureFork);store.Activate(official);store.Activate(futureFork);
-        Check(store.Active.Channel=="fork"&&store.Matches(futureFork,game),"Kanalwechsel trotz gleicher Versionsnummer");
+        var localBuild=store.Capture(game,"local","0.4.19","TEST FIXTURE","Synthetic local payload; not published.");
+        store.Activate(localBuild);store.Activate(official);store.Activate(localBuild);
+        Check(store.Active.Channel=="local"&&store.Matches(localBuild,game),"Kanalwechsel trotz gleicher Versionsnummer");
         bool failed=false;try{store.Activate(official,n=>{if(n==3)throw new IOException("Injected copy failure");});}catch(IOException){failed=true;}
-        Check(failed&&store.Matches(futureFork,game)&&!store.RecoveryPending,"Fehler nach drei Dateien rollt vollständig zurück");
+        Check(failed&&store.Matches(localBuild,game)&&!store.RecoveryPending,"Fehler nach drei Dateien rollt vollständig zurück");
         var oldState=ProfileStore.Read<ProfileState>(Path.Combine(store.Root,"profiles.json"));
-        ProfileStore.Write(Path.Combine(store.Root,"switch-pending.json"),new SwitchJournal{Previous=oldState,Restore=futureFork.Id});
+        ProfileStore.Write(Path.Combine(store.Root,"switch-pending.json"),new SwitchJournal{Previous=oldState,Restore=localBuild.Id});
         File.WriteAllText(Path.Combine(game,"alut.dll"),"interrupted copy");
         var restarted=new ProfileStore(store.Root,false);Check(restarted.RecoveryPending,"Unterbrechung nach Neustart erkannt");restarted.Recover();
-        Check(restarted.Matches(futureFork,game)&&!restarted.RecoveryPending,"Wiederherstellung nach simuliertem Prozessabbruch");store=restarted;
-        string savedForkId=store.State.Fork;
+        Check(restarted.Matches(localBuild,game)&&!restarted.RecoveryPending,"Wiederherstellung nach simuliertem Prozessabbruch");store=restarted;
+        string savedOfficialId=store.State.Official;
         string external=Path.Combine(game,"mods","mp_lockstep_1","local-edit.lua");File.WriteAllText(external,"local edited = true");
-        store.DetectLocalChanges();Check(store.Active.Channel=="local"&&store.State.Fork==savedForkId,"lokale Änderungen getrennt vom Fork-Release gesichert");
+        store.DetectLocalChanges();Check(store.Active.Channel=="local"&&store.State.Official==savedOfficialId,"lokale Änderungen getrennt vom Silver-Release gesichert");
         store.Activate(official);Check(!File.Exists(external),"lokale Zusatzdatei hinterlässt keinen Mischstand");
         foreach(string bad in new[]{"../outside.dll","mods/mp_lockstep_1/../../save.sav","plugins/unrelated.dll","alut_real.dll","mods/mp_lockstep_1/test.lua:stream","C:/Windows/file.dll","unrelated.txt","tpf2mp_version.txt:stream"})Reject(()=>ProfileStore.SafePath(game,bad),"Pfadschutz "+bad);
-        string manifest=Path.Combine(store.Root,"Profiles",futureFork.Id,"profile.json");var invalid=ProfileStore.Read<Profile>(manifest);string originalPath=invalid.Files[0].Path;invalid.Files[0].Path="../outside.dll";ProfileStore.Write(manifest,invalid);
-        Reject(()=>store.Activate(futureFork),"manipuliertes Profil vor Dateischreibzugriff abgewiesen");
+        string manifest=Path.Combine(store.Root,"Profiles",localBuild.Id,"profile.json");var invalid=ProfileStore.Read<Profile>(manifest);string originalPath=invalid.Files[0].Path;invalid.Files[0].Path="../outside.dll";ProfileStore.Write(manifest,invalid);
+        Reject(()=>store.Activate(localBuild),"manipuliertes Profil vor Dateischreibzugriff abgewiesen");
         Check(store.Matches(official,game),"aktives Profil nach ungültigem Ziel unverändert");invalid.Files[0].Path=originalPath;ProfileStore.Write(manifest,invalid);
-        string corrupt=Path.Combine(store.Root,"Profiles",futureFork.Id,"files",invalid.Files[0].Path.Replace('/','\\'));File.AppendAllText(corrupt,"corrupt");
-        Reject(()=>store.Activate(futureFork),"beschädigte Profildatei vor Wechsel abgewiesen");
+        string corrupt=Path.Combine(store.Root,"Profiles",localBuild.Id,"files",invalid.Files[0].Path.Replace('/','\\'));File.AppendAllText(corrupt,"corrupt");
+        Reject(()=>store.Activate(localBuild),"beschädigte Profildatei vor Wechsel abgewiesen");
         Check(File.ReadAllText(Path.Combine(game,"alut_real.dll"))=="stock audio sentinel"&&File.ReadAllText(Path.Combine(game,"save.sav"))=="save sentinel"&&File.ReadAllText(Path.Combine(game,"plugins","unrelated.dll"))=="other plugin sentinel"&&File.ReadAllText(Path.Combine(game,"mods","other_mod","mod.lua"))=="other mod sentinel","Original-DLL, Spielstände, andere Plugins und Mods unverändert");
         Console.WriteLine("PASS total="+count+" testRoot="+root);
     }

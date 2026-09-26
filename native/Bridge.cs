@@ -16,24 +16,15 @@ public static class NativeBridge {
     static void Write(object value) { lock(OutputLock)Console.WriteLine(Json.Serialize(value)); }
     static void Progress(string text, int percent=0) { Write(new {kind="progress",text=text,percent=percent}); }
     static void Open(string target) { Process.Start(new ProcessStartInfo(target){UseShellExecute=true}); }
-    static string Channel(string value) { if(value=="official")return "official";throw new InvalidDataException("Only releases from silver2127 are supported."); }
-    static string PublicChannel(string value) { return value=="fork"?"community":value; }
     public static void EnsureNativeContext() {
         uint length=0;
         if(GetCurrentPackageFullName(ref length,null)!=15700)
             throw new InvalidOperationException("Open the launcher from the Windows Start menu. The current app context redirects user data.");
     }
-    static void RequireOldLauncherClosed() {
-        try { using(var gate=Mutex.OpenExisting(@"Local\TPF2OfficialPersonalLauncher")) {
-            bool acquired=false;try{acquired=gate.WaitOne(0);}catch(AbandonedMutexException){acquired=true;}
-            if(!acquired)throw new InvalidOperationException("Close the previous launcher first.");
-            gate.ReleaseMutex();
-        }}catch(WaitHandleCannotBeOpenedException){}
-    }
     static object Status(ProfileStore store) {
         string folder=null;try{folder=Updater.GameFolder();}catch(InvalidOperationException){}
         var active=store.Installed(folder);
-        return new {gameFolder=folder,installed=active==null?null:new {version=active.Version,channel=PublicChannel(active.Channel)},
+        return new {gameFolder=folder,installed=active==null?null:new {version=active.Version,channel=active.Channel},
             running=Updater.GameRunning(),recovery=store.RecoveryPending,initialized=store.State!=null,backupLimit=store.BackupLimit,experimental=store.ExperimentalReleases};
     }
     static void InitializeIfPresent(ProfileStore store) {
@@ -42,11 +33,9 @@ public static class NativeBridge {
         if(version==null)return;
         string folder;try{folder=Updater.GameFolder();}catch(InvalidOperationException){return;}
         if(!ProfileStore.HasModFiles(folder))return;
-        RequireOldLauncherClosed();
         store.Initialize(folder,version);
     }
-    static async Task<object> Run(string action,string channel,string expectedVersion) {
-        Channel(channel);
+    static async Task<object> Run(string action,string expectedVersion) {
         var store=new ProfileStore(Updater.Home,true);
         switch(action) {
             case "release-track": {
@@ -68,14 +57,17 @@ public static class NativeBridge {
                 InitializeIfPresent(store);
                 return Status(store);
             case "fetch": {
-                var release=await Updater.Fetch(Channel(channel),store.ExperimentalReleases);
+                var release=await Updater.Fetch(store.ExperimentalReleases);
                 if(release==null)return null;
                 return release.Summary();
             }
             case "choose-folder": {
-                Updater.RequireClosed();RequireOldLauncherClosed();
+                Updater.RequireClosed();
+                // The helper has no window of its own; a topmost owner keeps the dialog in front of the launcher.
+                using(var owner=new Form{TopMost=true,ShowInTaskbar=false,FormBorderStyle=FormBorderStyle.None,StartPosition=FormStartPosition.CenterScreen,Width=1,Height=1,Opacity=0})
                 using(var dialog=new FolderBrowserDialog{Description="Select the Transport Fever 2 folder containing TransportFever2.exe"}) {
-                    if(dialog.ShowDialog()!=DialogResult.OK)return Status(store);
+                    owner.Show();owner.Activate();
+                    if(dialog.ShowDialog(owner)!=DialogResult.OK)return Status(store);
                     string folder=Path.GetFullPath(dialog.SelectedPath);
                     if(!File.Exists(Path.Combine(folder,"TransportFever2.exe")))throw new InvalidDataException("This folder does not contain TransportFever2.exe.");
                     if(store.State!=null&&!String.Equals(folder,store.State.GameFolder,StringComparison.OrdinalIgnoreCase))
@@ -85,7 +77,7 @@ public static class NativeBridge {
                 InitializeIfPresent(store);return Status(store);
             }
             case "install": {
-                Updater.RequireClosed();RequireOldLauncherClosed();InitializeIfPresent(store);
+                Updater.RequireClosed();InitializeIfPresent(store);
                 if(store.RecoveryPending)throw new InvalidOperationException("Restore the interrupted installation first.");
                 if(expectedVersion==null)throw new InvalidDataException("Check the available release first.");
                 var release=await Updater.FetchVersion(expectedVersion,store.ExperimentalReleases);
@@ -100,7 +92,7 @@ public static class NativeBridge {
                 }
                 Progress("Downloading and verifying release…");
                 var target=await store.PrepareRelease(release,p=>Progress("Downloading release…",p));
-                Updater.RequireClosed();RequireOldLauncherClosed();
+                Updater.RequireClosed();
                 Progress("Backing up current files and installing release…");
                 await LauncherSetup.Activate(store,target);
                 try { store.PruneBackups(); LauncherSetup.CleanDownloads(store.Root); }
@@ -108,7 +100,7 @@ public static class NativeBridge {
                 return Status(store);
             }
             case "recover": {
-                Updater.RequireClosed();RequireOldLauncherClosed();
+                Updater.RequireClosed();
                 if(!store.RecoveryPending)return Status(store);
                 var journal=ProfileStore.Read<SwitchJournal>(Path.Combine(store.Root,"switch-pending.json"));
                 await LauncherSetup.Activate(store,store.Load(journal.Restore));return Status(store);
@@ -138,8 +130,8 @@ public static class NativeBridge {
         try {
             EnsureNativeContext();
             if(LauncherSetup.HandleElevatedAction(args))return 0;
-            if(args.Length<2||args.Length>3)throw new InvalidDataException("Invalid launcher arguments.");
-            var result=Run(args[0],args[1],args.Length==3?args[2]:null).GetAwaiter().GetResult();
+            if(args.Length<1||args.Length>2)throw new InvalidDataException("Invalid launcher arguments.");
+            var result=Run(args[0],args.Length==2?args[1]:null).GetAwaiter().GetResult();
             Write(new {ok=true,data=result});return 0;
         }catch(Exception ex){Write(new {ok=false,error=ex.Message});return 1;}
     }

@@ -1,0 +1,31 @@
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Native helper and frontend
+        run: |
+          npm run native
+          if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+      - name: Native unit tests
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-unit.ps1
+      - name: Desktop state regression tests
+        run: node --test tests/*.test.js
+      - name: Rust checks
+        working-directory: src-tauri
+        run: cargo test --locked

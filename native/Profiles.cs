@@ -27,7 +27,6 @@ public class ProfileState {
     public string GameFolder { get; set; }
     public string Active { get; set; }
     public string Official { get; set; }
-    public string Fork { get; set; }
 }
 public class SwitchJournal {
     public ProfileState Previous { get; set; }
@@ -97,7 +96,6 @@ public sealed class ProfileStore {
                     CheckTree(directory);
                     // Only the active profile is exempt from the historical limit.
                     if (State.Official == profile.Id) State.Official = null;
-                    if (State.Fork == profile.Id) State.Fork = null;
                     Save();
                     Directory.Delete(directory, true);
                 }
@@ -157,7 +155,7 @@ public sealed class ProfileStore {
     }
     public Profile Load(string id) {
         var profile = Read<Profile>(System.IO.Path.Combine(ProfileDirectory(id), "profile.json"));
-        if (profile == null || profile.Id != id || (profile.Channel != "official" && profile.Channel != "fork" && profile.Channel != "local") || profile.Files == null || profile.Files.Length == 0 || profile.Files.Length > 10000)
+        if (profile == null || profile.Id != id || (profile.Channel != "official" && profile.Channel != "local") || profile.Files == null || profile.Files.Length == 0 || profile.Files.Length > 10000)
             throw new InvalidDataException("Invalid profile.");
         Updater.ParseVersion(profile.Version);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -212,7 +210,7 @@ public sealed class ProfileStore {
         if(requiresClosed)Updater.RequireClosed();
         if (State != null && !String.Equals(Updater.GameFolder(), State.GameFolder, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("The game folder changed. Installation stopped.");
         ValidateGame(Updater.GameFolder());
-        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string local = Updater.LocalData;
         string sandboxConfig=System.IO.Path.Combine(Root,"sandbox-roots.json");
         string[] sandboxes=File.Exists(sandboxConfig)?Read<string[]>(sandboxConfig):new string[0];
         var priorityRoots=new[]{System.IO.Path.Combine(local,"tpf2mp")}.Concat(sandboxes.Select(box=>System.IO.Path.Combine(box,@"user\current\AppData\Local\tpf2mp")));
@@ -220,9 +218,10 @@ public sealed class ProfileStore {
             foreach (string name in Core.Where(n => n.EndsWith(".dll") || n == "netpunch/netpunch.exe").Concat(new[] { "tpf2_previews.dll", "data/plugins/tpf2_previews.dll", "tpf2_workshop_register.dll", "data/plugins/tpf2_workshop_register.dll" }))
                 if (File.Exists(System.IO.Path.Combine(root, name))) throw new InvalidOperationException("An overriding runtime copy blocks installation: " + name);
         }
-        if (State != null) foreach(string sandbox in sandboxes) {
-            string drive = System.IO.Path.GetPathRoot(State.GameFolder).Substring(0, 1);
-            string overlay = System.IO.Path.Combine(sandbox, "drive", drive, State.GameFolder.Substring(3));
+        // Sandbox overlays mirror drive-letter paths only; network paths have no overlay.
+        string gameRoot = State == null ? "" : System.IO.Path.GetPathRoot(State.GameFolder);
+        if (gameRoot.Length == 3 && gameRoot[1] == ':') foreach(string sandbox in sandboxes) {
+            string overlay = System.IO.Path.Combine(sandbox, "drive", gameRoot.Substring(0, 1), State.GameFolder.Substring(3));
             if (Inventory(overlay).Length != 0) throw new InvalidOperationException("The test sandbox contains its own mod files. Installation stopped.");
         }
     }
@@ -283,7 +282,7 @@ public sealed class ProfileStore {
             string relative=extracted.Substring(source.Length+1).Replace('\\','/');
             if(!Managed(relative))throw new InvalidDataException("This release contains an unsupported component: "+relative);
         }
-        var profile = await Task.Run(() => Capture(source, release.Channel, release.Number.ToString(), "Silver", release.body ?? ""));
+        var profile = await Task.Run(() => Capture(source, "official", release.Number.ToString(), "Silver", release.body ?? ""));
         profile.PackageHash = release.Package.digest; Write(System.IO.Path.Combine(ProfileDirectory(profile.Id),"profile.json"),profile);
         State.Official = profile.Id;
         Save(); return profile;
@@ -317,7 +316,9 @@ public sealed class ProfileStore {
     }
     public void Activate(Profile target) {
         using(var gate=new System.Threading.Mutex(false,@"Local\TPF2ReleaseProfileMutation")) {
-            if(!gate.WaitOne(0))throw new IOException("Another installation is already in progress.");
+            // A crashed helper abandons the mutex; ownership then passes to this thread.
+            bool acquired=false;try{acquired=gate.WaitOne(0);}catch(System.Threading.AbandonedMutexException){acquired=true;}
+            if(!acquired)throw new IOException("Another installation is already in progress.");
             try{Activate(target,null);}finally{gate.ReleaseMutex();}
         }
     }
@@ -330,14 +331,14 @@ public sealed class ProfileStore {
         var before = Capture(State.GameFolder, changed ? "local" : previousActive.Channel, previousActive.Version, previousActive.Title, previousActive.Notes);
         before.PackageHash = changed ? null : previousActive.PackageHash; Write(System.IO.Path.Combine(ProfileDirectory(before.Id),"profile.json"),before);
         State.Active = before.Id;
-        if (before.Channel == "fork") State.Fork = before.Id; else if (before.Channel == "official") State.Official = before.Id;
+        if (before.Channel == "official") State.Official = before.Id;
         Save();
         var previous = Read<ProfileState>(StateFile);
         Write(JournalFile, new SwitchJournal { Previous = previous, Restore = before.Id });
         try {
             Guard(); ApplyFiles(target, testFault);
             State.Active = target.Id;
-            if (target.Channel == "fork") State.Fork = target.Id; else if (target.Channel == "official") State.Official = target.Id;
+            if (target.Channel == "official") State.Official = target.Id;
             Save(); File.Delete(JournalFile);
         } catch {
             // If a game was started meanwhile, keep the recovery journal and wait

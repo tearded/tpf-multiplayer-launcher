@@ -161,10 +161,10 @@ test("refresh checks game state before fetching the Silver release", async () =>
   assert.equal(ui.node("main-action").disabled, false);
 });
 
-test("legacy builds cannot be launched, including when GitHub is unavailable", () => {
+test("local non-Silver builds cannot be launched, including when GitHub is unavailable", () => {
   const ui = setup(async () => state(false));
   ui.setState(
-    { ...state(false), installed: { channel: "community", version: "0.6.2" } },
+    { ...state(false), installed: { channel: "local", version: "0.6.2" } },
     null,
   );
   assert.equal(ui.node("play-current").disabled, true);
@@ -181,7 +181,6 @@ test("an installed multiplayer version can be played offline", async () => {
   assert.equal(ui.node("main-action/span").textContent, "Play");
   await ui.mainAction();
   assert.equal(calls[0].action, "play");
-  assert.equal(calls[0].channel, "official");
 });
 
 test("downgrades and migration require an explicit install confirmation", async () => {
@@ -193,7 +192,7 @@ test("downgrades and migration require an explicit install confirmation", async 
   assert.equal(ui.node("install-dialog").open, true);
   assert.match(ui.node("install-title").textContent, /older release/);
   ui.setState(
-    { ...state(false), installed: { channel: "community", version: "0.6.2" } },
+    { ...state(false), installed: { channel: "local", version: "0.6.2" } },
     { version: "0.6.2" },
   );
   await ui.mainAction();
@@ -210,7 +209,7 @@ test("a failed release refresh clears the stale installation offer", async () =>
   assert.equal(ui.node("main-action/span").textContent, "Play");
 });
 
-test("a successful installation starts Silver and only passes the official source", async () => {
+test("a successful installation starts Silver with the selected version", async () => {
   const calls = [];
   const ui = setup(async (_, args) => {
     calls.push(args);
@@ -227,11 +226,10 @@ test("a successful installation starts Silver and only passes the official sourc
     calls.map((c) => c.action),
     ["install", "play"],
   );
-  assert.ok(calls.every((c) => c.channel === "official"));
-  assert.equal(calls[0].version, "0.6.2");
+  assert.equal(calls[0].value, "0.6.2");
 });
 
-test("recovery takes priority and does not start a restored legacy build", async () => {
+test("recovery takes priority and does not start a restored local build", async () => {
   const calls = [];
   const ui = setup(async (_, args) => {
     calls.push(args.action);
@@ -257,7 +255,7 @@ test("historical installation passes the selected version instead of the latest 
   ui.selectHistoricalVersion("0.6.1.14");
   await ui.performInstall();
   assert.equal(calls[0].action, "install");
-  assert.equal(calls[0].version, "0.6.1.14");
+  assert.equal(calls[0].value, "0.6.1.14");
   assert.equal(calls[1].action, "play");
   assert.equal(ui.node("offered-version").textContent, "0.6.1.18");
 });
@@ -315,4 +313,22 @@ test("launcher update notice clears when a recheck finds no update or fails", as
     await ui.checkLauncherUpdate();
     assert.equal(ui.node("launcher-update-badge").hidden, true);
   }
+});
+
+test("timer polls only the game process until it changes", async () => {
+  const calls = [];
+  let running = false;
+  const ui = setup(async (command, args) => {
+    calls.push(command === "game_running" ? command : args.action);
+    return command === "game_running" ? running : state(running);
+  });
+  await ui.refreshGameStatus();
+  await ui.refreshGameStatus(false);
+  await ui.refreshGameStatus(false);
+  assert.deepEqual(calls, ["status", "game_running", "game_running"]);
+  running = true;
+  await ui.refreshGameStatus(false);
+  assert.deepEqual(calls.slice(3), ["game_running", "status"]);
+  assert.equal(ui.node("main-action").disabled, true);
+  assert.match(ui.node(".connection-status").textContent, /Game is running/);
 });

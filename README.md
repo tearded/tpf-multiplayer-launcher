@@ -74,7 +74,7 @@ npm ci
 npm run desktop
 ```
 
-For a browser preview with clearly marked sample data, run `node serve.mjs` and open http://127.0.0.1:4318. The preview does not install or launch anything. The previous minimal design remains available at `/fallback.html`; use the links in the preview header to compare both designs.
+For a browser preview with clearly marked sample data, run `npm run dev` and open http://127.0.0.1:4319 (add `?launcher-update` to simulate a launcher update). The preview does not install or launch anything. The previous minimal design remains available at `/fallback.html`; use the links in the preview header to compare both designs.
 
 ```powershell
 npm run build
@@ -98,7 +98,7 @@ If Windows still shows an old launcher icon after an update, run `powershell -No
 2. Add release notes in `docs/releases/<version>.md`.
 3. Push the reviewed commit to `main` and tag it `v<version>`.
 
-The Windows workflow runs only when a version tag such as `v1.0.0` is pushed. Normal commits and pull requests do not trigger a build. The workflow builds and tests the source, signs the installer with the `TAURI_SIGNING_PRIVATE_KEY` GitHub Actions secret, creates update metadata and uploads a draft release. It downloads and verifies the assets before publishing. Existing releases are never replaced.
+The Windows release workflow runs only when a version tag such as `v1.0.0` is pushed. Commits to `main` and pull requests only run the tests (`ci.yml`) and never package or publish anything. The release workflow builds and tests the source, signs the installer with the `TAURI_SIGNING_PRIVATE_KEY` GitHub Actions secret, creates update metadata and uploads a draft release. It downloads and verifies the assets before publishing. Existing releases are never replaced.
 
 Keep the private signing key outside the repository and backed up. Existing installations only accept updates signed with that key. The public verification key is in the Tauri configuration.
 

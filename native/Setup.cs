@@ -6,16 +6,26 @@ using System.Windows.Forms;
 
 public static class LauncherSetup {
     public static bool HandleElevatedAction(string[] args) {
-        if(args.Length!=3||args[0]!="--activate")return false;
+        if(args.Length!=4||args[0]!="--activate")return false;
         Guid profileId,requestId;
         if(!Guid.TryParseExact(args[1],"N",out profileId)||!Guid.TryParseExact(args[2],"N",out requestId))throw new InvalidDataException("Invalid installation request.");
+        Updater.LocalData=ElevatedDataFolder(args[3]);
         string result=Path.Combine(Updater.Home,"switch-result-"+args[2]+".txt");
         try{var store=new ProfileStore(Updater.Home,true);if(store.RecoveryPending)store.Recover();else {var target=store.Load(args[1]);RequireSilver(target);store.Activate(target);}File.WriteAllText(result,"OK");Environment.Exit(0);}
         catch(Exception ex){File.WriteAllText(result,ex.Message);Environment.Exit(1);}
         return true;
     }
+    internal static string ElevatedDataFolder(string value) {
+        // Only a local, fully qualified folder that already holds launcher data is accepted.
+        string full;
+        try{full=Path.GetFullPath(value).TrimEnd('\\');}catch(Exception){throw new InvalidDataException("Invalid installation request.");}
+        if(!Path.IsPathRooted(value)||value.StartsWith(@"\\")||!String.Equals(full,value.TrimEnd('\\'),StringComparison.OrdinalIgnoreCase)||
+            !File.Exists(Path.Combine(full,"TPF2-MP","OfficialLauncher","profiles.json")))
+            throw new InvalidDataException("Invalid installation request.");
+        return full;
+    }
     public static void RequireSilver(Profile target) {
-        if(target==null||target.Channel!="official")throw new InvalidDataException("Only Silver can be installed. Legacy profiles are retained for recovery only.");
+        if(target==null||target.Channel!="official")throw new InvalidDataException("Only Silver can be installed. Local backups are kept for recovery only.");
     }
     public static async Task Activate(ProfileStore store,Profile target) {
         if(!store.RecoveryPending)RequireSilver(target);
@@ -25,7 +35,7 @@ public static class LauncherSetup {
         catch(UnauthorizedAccessException){needsElevation=true;}
         if(!needsElevation){await Task.Run(()=>{if(store.RecoveryPending)store.Recover();else store.Activate(target);});return;}
         string request=Guid.NewGuid().ToString("N"),result=Path.Combine(Updater.Home,"switch-result-"+request+".txt");
-        var info=new ProcessStartInfo(Application.ExecutablePath,"--activate "+target.Id+" "+request){UseShellExecute=true,Verb="runas"};
+        var info=new ProcessStartInfo(Application.ExecutablePath,"--activate "+target.Id+" "+request+" \""+Updater.LocalData+"\""){UseShellExecute=true,Verb="runas"};
         using(var process=Process.Start(info)){
             await Task.Run(()=>process.WaitForExit());
             if(process.ExitCode!=0)throw new InvalidOperationException(File.Exists(result)?File.ReadAllText(result):"Installation with administrator permissions was cancelled.");
@@ -106,7 +116,6 @@ public static class LauncherSetup {
         if(ProfileStore.Hash(original)!=stockHash)throw new IOException("Could not verify the original audio DLL backup.");
     }
     public static async Task InstallBase(Release release,Action<int> progress) {
-        if(release.Channel!="official")throw new InvalidOperationException("Install the Silver multiplayer base first.");
         Updater.RequireClosed();string game=Updater.GameFolder();
         string package=await Updater.Download(release,progress);ValidateMsi(package,release);
         await Task.Run(()=>Updater.Backup(game,Updater.RegistryValue("Version")??"First installation"));

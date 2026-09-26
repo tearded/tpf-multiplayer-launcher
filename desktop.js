@@ -141,9 +141,10 @@ function render() {
     busy || (!offer && !pendingInstallVersion) || Boolean(status?.running);
 }
 async function native(action, options = {}) {
-  return invoke("native_action", { action, channel: "official", ...options });
+  return invoke("native_action", { action, ...options });
 }
 function acceptStatus(value) {
+  lastFullStatus = Date.now();
   status = value;
   installed = value.installed;
   render();
@@ -157,10 +158,17 @@ function refreshStatus() {
       });
   return statusRefresh;
 }
-async function refreshGameStatus() {
+// The timer only asks Rust for the game process. The full helper status (which
+// hashes mod files) runs on focus, when the game starts or stops, or every 30 s.
+let lastFullStatus = 0;
+async function refreshGameStatus(full = true) {
   if (busy || document.hidden) return;
   const wasRunning = status?.running;
   try {
+    if (!full && status && Date.now() - lastFullStatus < 30000) {
+      const running = await invoke("game_running");
+      if (running === wasRunning || busy) return;
+    }
     await refreshStatus();
     if (status.running !== wasRunning)
       message(
@@ -241,7 +249,7 @@ async function performInstall() {
   $("install-dialog").close();
   await task(async () => {
     message("Preparing installation…");
-    acceptStatus(await native("install", { version }));
+    acceptStatus(await native("install", { value: version }));
     message(`Multiplayer ${installed.version} installed.`);
     await play();
   });
@@ -363,7 +371,7 @@ export async function initializeDesktop() {
     if (!link) return;
     event.preventDefault();
     const url = releaseLink(link.href);
-    if (url) task(() => native("release-link", { version: url }));
+    if (url) task(() => native("release-link", { value: url }));
   });
   document.querySelector(".preview-label").hidden = true;
   ["open-settings", "launcher-info", "launcher-update-badge"].forEach((id) =>
@@ -399,7 +407,7 @@ export async function initializeDesktop() {
     const selected = event.target.value;
     await task(async () => {
       try {
-        const saved = await native("backup-limit", { version: selected });
+        const saved = await native("backup-limit", { value: selected });
         status.backupLimit = saved.backupLimit;
         $("backup-feedback").textContent =
           "Saved. Applies after the next successful mod installation.";
@@ -414,7 +422,7 @@ export async function initializeDesktop() {
     task(async () => {
       $("history-status").textContent = "Loading releases…";
       try {
-        const page = await native("history", { version: String(historyPage) });
+        const page = await native("history", { value: String(historyPage) });
         window.launcherHistory.add(page.entries, (entry) =>
           task(async () => {
             await refreshStatus();
@@ -451,7 +459,7 @@ export async function initializeDesktop() {
     const selected = event.target.value;
     task(async () => {
       try {
-        const saved = await native("release-track", { version: selected });
+        const saved = await native("release-track", { value: selected });
         status.experimental = saved.experimental;
         offer = null;
         pendingInstallVersion = null;
@@ -495,8 +503,8 @@ export async function initializeDesktop() {
   document.documentElement.dataset.ready = "true";
   const launcherUpdateCheck = checkLauncherUpdate();
   await checkGame();
-  window.addEventListener("focus", refreshGameStatus);
-  document.addEventListener("visibilitychange", refreshGameStatus);
-  window.setInterval(refreshGameStatus, 2500);
+  window.addEventListener("focus", () => refreshGameStatus());
+  document.addEventListener("visibilitychange", () => refreshGameStatus());
+  window.setInterval(() => refreshGameStatus(false), 2500);
   await launcherUpdateCheck;
 }
