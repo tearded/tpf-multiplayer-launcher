@@ -205,5 +205,9 @@ public static class UnitTests {
         var empty=new Release{tag_name="v0.7.0.8",assets=new[]{launchers}};
         Updater.UsePackages(empty,new System.Collections.Generic.Dictionary<string,Release>{{"v0.7.0.8",new Release{tag_name="v0.7.0.8",assets=new Asset[0]}}});
         Check(empty.PackageSource==Updater.Repository,"an empty packages release is not used");
+        var mod=new Release{tag_name="v0.7.0.6",published_at="2026-09-27T10:00:00Z"};
+        var launcherUpdate=new Release{tag_name="launcher-v1.2.0",name="Launcher 1.2.0",published_at="2026-09-28T10:00:00Z"};
+        Check(Updater.SelectRelease(new[]{mod,launcherUpdate},false)==mod,"a newer launcher-v* release is not offered as a mod version");
+        Check(Updater.SelectRelease(new[]{launcherUpdate},false)==null&&Updater.SelectRelease(new[]{launcherUpdate},true)==null,"launcher releases appear on neither track");
     }
 }

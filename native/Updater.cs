@@ -131,6 +131,11 @@ public static class Updater {
     // A release with the same tag in the packages repository carries the install files of that
     // release (a draft or an empty one does not count). Only the tag decides, and only these two
     // repositories are ever sources (Release.Validate).
+    // Silver's repository also publishes launcher updates on their own, tagged launcher-v<version>:
+    // they are not mod versions and never appear as one.
+    internal static bool IsLauncherRelease(Release release) {
+        return release != null && (release.tag_name ?? "").StartsWith("launcher-", StringComparison.OrdinalIgnoreCase);
+    }
     internal static void UsePackages(Release release, System.Collections.Generic.IDictionary<string, Release> packages) {
         Release package;
         if (release == null || packages == null || release.tag_name == null || !packages.TryGetValue(release.tag_name, out package)) return;
@@ -153,7 +158,7 @@ public static class Updater {
         return map;
     }
     internal static Release SelectRelease(System.Collections.Generic.IEnumerable<Release> releases, bool experimental) {
-        var selected = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
+        var selected = releases.Where(r => r != null && !r.draft && !IsLauncherRelease(r) && r.Experimental == experimental)
             .OrderByDescending(r => PublishedAt(r)).FirstOrDefault();
         if (selected != null) selected.AllowExperimental=experimental;
         return selected;
@@ -211,7 +216,7 @@ public static class Updater {
         var releases=await FetchReleasePage(page,20);
         var packages=await PackageReleases();
         foreach (var release in releases) UsePackages(release, packages);
-        var entries = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
+        var entries = releases.Where(r => r != null && !r.draft && !IsLauncherRelease(r) && r.Experimental == experimental)
             .Select(r => { r.AllowExperimental=experimental; return r.Summary(); }).ToArray();
         return new {entries=entries,hasMore=releases.Length==20};
     }
