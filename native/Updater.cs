@@ -28,6 +28,9 @@ public class Release {
     public bool draft { get; set; }
     public bool prerelease { get; set; }
     public Asset[] assets { get; set; }
+    // Where the install files are: the mod's release up to 0.7.0.5, the packages
+    // repository's release with the same tag from 0.7.0.6 on (Updater.WithPackages).
+    [ScriptIgnore] public string AssetsRepository = Updater.Repository;
     public Version Number { get { return Updater.ParseVersion(tag_name); } }
     public string DisplayVersion { get { return (tag_name ?? "").StartsWith("v", StringComparison.Ordinal) ? tag_name.Substring(1) : tag_name; } }
     public string InstallationIssue {
@@ -51,7 +54,8 @@ public class Release {
     public void Validate() {
         if (draft || (Experimental && !AllowExperimental) || Number == null) throw new InvalidDataException("This is not a supported stable Silver release.");
         var asset = Package;
-        if (asset.browser_download_url != "https://github.com/" + Updater.Repository + "/releases/download/" + tag_name + "/TpF2Multiplayer.msi" ||
+        if ((AssetsRepository != Updater.Repository && AssetsRepository != Updater.PackagesRepository) ||
+            asset.browser_download_url != "https://github.com/" + AssetsRepository + "/releases/download/" + tag_name + "/TpF2Multiplayer.msi" ||
             asset.digest == null || !Regex.IsMatch(asset.digest, @"\Asha256:[0-9a-fA-F]{64}\z") || asset.size <= 0 || asset.size > 536870912)
             throw new InvalidDataException("The download URL, size or SHA-256 checksum is missing or invalid.");
     }
@@ -69,6 +73,9 @@ public sealed class HttpDownload : WebClient {
 public static class Updater {
     // The only release source; the launcher never installs builds from other repositories.
     public const string Repository = "silver2127/tpf2-multiplayer";
+    // From 0.7.0.6 a mod release carries the two launchers only; its install files
+    // are on the release with the same tag in this repository.
+    public const string PackagesRepository = "silver2127/tpf2-multiplayer-packages";
     // An elevated helper may run as a different Windows account; it then receives
     // the invoking user's local data folder instead of using its own.
     public static string LocalData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -117,13 +124,70 @@ public static class Updater {
             if (releases.Length < 100) break;
             if (page == 10) throw new InvalidDataException("Release list is too large to determine the latest version safely.");
         }
-        return SelectRelease(candidates, experimental);
+        var selected = SelectRelease(candidates, experimental);
+        if (selected != null) await WithPackages(selected);
+        return selected;
+    }
+    // Not a mod version: a launcher update (tagged launcher-v<version>), or a version's
+    // download page tagged without the "v" (0.7.0.6 beside v0.7.0.6). From 0.7.0.6 the
+    // page players open carries the two launchers; v<version>, published after it, is
+    // the release with the install files, the one every launcher resolves (launchers
+    // up to 1.2.0 take the newest published release, then look v<version> up first).
+    internal static bool Listed(Release r, System.Collections.Generic.ICollection<string> tags) {
+        if (r == null || r.draft) return false;
+        string tag = r.tag_name ?? "";
+        if (tag.StartsWith("launcher-", StringComparison.Ordinal)) return false;
+        return tag.StartsWith("v", StringComparison.Ordinal) || !tags.Contains("v" + tag);
     }
     internal static Release SelectRelease(System.Collections.Generic.IEnumerable<Release> releases, bool experimental) {
-        var selected = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
+        var all = releases.Where(r => r != null).ToList();
+        var tags = new System.Collections.Generic.HashSet<string>(all.Select(r => r.tag_name ?? ""));
+        var selected = all.Where(r => Listed(r, tags) && r.Experimental == experimental)
             .OrderByDescending(r => PublishedAt(r)).FirstOrDefault();
         if (selected != null) selected.AllowExperimental=experimental;
         return selected;
+    }
+    // The packages repository's release with the same tag, or null.
+    static async Task<Release> PackagesFor(string tag) {
+        using (var client = new HttpDownload()) {
+            try {
+                var job = client.DownloadStringTaskAsync("https://api.github.com/repos/" + PackagesRepository + "/releases/tags/" + Uri.EscapeDataString(tag ?? ""));
+                if (await Task.WhenAny(job, Task.Delay(45000)) != job) { client.CancelAsync(); throw new TimeoutException("GitHub did not respond. Try again later."); }
+                var packages = new JavaScriptSerializer{MaxJsonLength=8388608}.Deserialize<Release>(await job);
+                return packages != null && !packages.draft && packages.tag_name == tag ? packages : null;
+            } catch (WebException ex) {
+                var response = ex.Response as HttpWebResponse;
+                if (response == null || response.StatusCode != HttpStatusCode.NotFound) throw;
+                return null;
+            }
+        }
+    }
+    // Take the install files from the packages release when it has the MSI.
+    internal static void UsePackages(Release release, Release packages) {
+        if (release == null || packages == null || packages.tag_name != release.tag_name) return;
+        if (!(packages.assets ?? new Asset[0]).Any(a => a != null && a.name == "TpF2Multiplayer.msi")) return;
+        release.assets = packages.assets;
+        release.AssetsRepository = PackagesRepository;
+    }
+    static bool HasMsi(Release release) { return (release.assets ?? new Asset[0]).Any(a => a != null && a.name == "TpF2Multiplayer.msi"); }
+    public static async Task WithPackages(Release release) {
+        if (release == null || HasMsi(release)) return;
+        UsePackages(release, await PackagesFor(release.tag_name));
+    }
+    // Every packages release by tag, for the history (one listing, not a request per entry).
+    static async Task<System.Collections.Generic.Dictionary<string, Release>> PackagesIndex() {
+        var index = new System.Collections.Generic.Dictionary<string, Release>();
+        for (int page = 1; page <= 5; page++) {
+            Release[] releases;
+            using (var client = new HttpDownload()) {
+                var job = client.DownloadStringTaskAsync("https://api.github.com/repos/" + PackagesRepository + "/releases?per_page=100&page=" + page);
+                if (await Task.WhenAny(job, Task.Delay(45000)) != job) { client.CancelAsync(); throw new TimeoutException("GitHub did not respond. Try again later."); }
+                releases = new JavaScriptSerializer{MaxJsonLength=8388608}.Deserialize<Release[]>(await job) ?? new Release[0];
+            }
+            foreach (var r in releases) if (r != null && !r.draft && r.tag_name != null) index[r.tag_name] = r;
+            if (releases.Length < 100) break;
+        }
+        return index;
     }
     static DateTimeOffset PublishedAt(Release release) {
         DateTimeOffset date;
@@ -148,6 +212,7 @@ public static class Updater {
                     if (await Task.WhenAny(job, Task.Delay(45000)) != job) { client.CancelAsync(); throw new TimeoutException("GitHub did not respond. Try again later."); }
                     var release = new JavaScriptSerializer().Deserialize<Release>(await job);
                     if (release == null || release.Number.ToString() != version) throw new InvalidDataException("The requested release does not match.");
+                    await WithPackages(release);
                     release.AllowExperimental=allowExperimental; release.Validate(); return release;
                 } catch (WebException ex) {
                     var response = ex.Response as HttpWebResponse;
@@ -160,8 +225,15 @@ public static class Updater {
     public static async Task<object> History(int page, bool experimental = false) {
         if (page < 1 || page > 10000) throw new InvalidDataException("Invalid history page.");
         var releases=await FetchReleasePage(page,20);
-        var entries = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
-            .Select(r => { r.AllowExperimental=experimental; return r.Summary(); }).ToArray();
+        var tags = new System.Collections.Generic.HashSet<string>(releases.Where(r => r != null).Select(r => r.tag_name ?? ""));
+        var shown = releases.Where(r => Listed(r, tags) && r.Experimental == experimental).ToArray();
+        if (shown.Any(r => !HasMsi(r))) {
+            // an unreachable packages listing leaves those entries marked not installable
+            System.Collections.Generic.Dictionary<string, Release> index = null;
+            try { index = await PackagesIndex(); } catch (WebException) { } catch (TimeoutException) { }
+            if (index != null) foreach (var r in shown) { Release packages; if (index.TryGetValue(r.tag_name ?? "", out packages)) UsePackages(r, packages); }
+        }
+        var entries = shown.Select(r => { r.AllowExperimental=experimental; return r.Summary(); }).ToArray();
         return new {entries=entries,hasMore=releases.Length==20};
     }
     public static void Verify(Release release, string file) {
