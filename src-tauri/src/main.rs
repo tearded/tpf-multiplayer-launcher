@@ -1,11 +1,20 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(windows)]
 use std::io::{BufRead, BufReader, Read};
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(windows)]
 use std::process::{Child, ChildStdout, Command, ExitStatus, Stdio};
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc};
+#[cfg(windows)]
+use std::sync::{Mutex, mpsc};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
+
+// Linux has no C# helper: the same actions, answered in Rust (see linux.rs).
+#[cfg(target_os = "linux")]
+mod linux;
 
 #[derive(Clone, Default)]
 struct Operation(Arc<AtomicBool>);
@@ -13,7 +22,7 @@ struct Reset(Arc<AtomicBool>);
 impl Drop for Reset { fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); } }
 
 fn allowed(action: &str) -> bool {
-    matches!(action, "status" | "fetch" | "install" | "uninstall" | "recover" | "play" | "game-folder" | "choose-folder" | "backups" | "release-page" | "release-link" | "backup-limit" | "history" | "release-track")
+    matches!(action, "status" | "fetch" | "install" | "uninstall" | "recover" | "play" | "game-folder" | "choose-folder" | "backups" | "release-page" | "release-link" | "backup-limit" | "history" | "release-track" | "game-mode")
 }
 
 fn valid_release_link(value: &str) -> bool {
@@ -31,6 +40,7 @@ fn time_limit(action: &str) -> Option<Duration> {
     }
 }
 
+#[cfg(windows)]
 fn read_results(app: &tauri::AppHandle, stdout: ChildStdout) -> Result<Option<serde_json::Value>, String> {
     let mut result = None;
     for line in BufReader::new(stdout).lines() {
@@ -43,6 +53,7 @@ fn read_results(app: &tauri::AppHandle, stdout: ChildStdout) -> Result<Option<se
 }
 
 // Poll instead of blocking inside the lock, so the watchdog can still kill the helper.
+#[cfg(windows)]
 fn wait_for(child: &Mutex<Child>) -> Result<ExitStatus, String> {
     loop {
         if let Some(status) = child.lock().map_err(|_|"The launcher helper failed.")?.try_wait().map_err(|e|e.to_string())? { return Ok(status); }
@@ -51,6 +62,11 @@ fn wait_for(child: &Mutex<Child>) -> Result<ExitStatus, String> {
 }
 
 // Cheap process check for status polling; the full helper status also hashes game files.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn game_running() -> Result<bool, String> { Ok(linux::game_running()) }
+
+#[cfg(windows)]
 #[tauri::command]
 fn game_running() -> Result<bool, String> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -82,6 +98,16 @@ async fn native_action(app: tauri::AppHandle, state: tauri::State<'_, Operation>
     } else if let Some(ref value) = value { if value.len()>32 || !value.chars().all(|c| c.is_ascii_digit() || c == '.') { return Err("Invalid launcher argument.".into()); } }
     if state.0.swap(true, Ordering::SeqCst) { return Err("An operation is already in progress. Please wait.".into()); }
     let guard = Reset(state.0.clone());
+    #[cfg(target_os = "linux")]
+    {
+        let _ = time_limit;
+        return tauri::async_runtime::spawn_blocking(move || {
+            let _guard = guard;
+            linux::run(&app, &action, value.as_deref())
+        }).await.map_err(|e|e.to_string())?;
+    }
+    #[cfg(windows)]
+    {
     let helper = app.path().resource_dir().map_err(|e|e.to_string())?.join("TPF2Launcher.Native.exe");
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
@@ -119,10 +145,15 @@ async fn native_action(app: tauri::AppHandle, state: tauri::State<'_, Operation>
         if !status.success() || value["ok"] != true { return Err(value["error"].as_str().unwrap_or("Operation failed.").to_owned()); }
         Ok(value["data"].clone())
     }).await.map_err(|e|e.to_string())?
+    }
 }
 
 fn main() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // the folder dialog of "choose-folder" (Windows uses the helper's own)
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _, _| { if let Some(window)=app.get_webview_window("main") { let _=window.unminimize(); let _=window.set_focus(); } }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Operation::default())

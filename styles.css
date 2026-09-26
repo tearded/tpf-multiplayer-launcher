@@ -1604,7 +1604,8 @@ label[for="backup-limit"] {
   flex-shrink: 0;
 }
 
-#release-track {
+#release-track,
+#game-mode {
   display: block;
   width: 100%;
   margin-top: 12px;
@@ -1615,7 +1616,8 @@ label[for="backup-limit"] {
   color: var(--text);
   font: inherit;
 }
-label[for="release-track"] {
+label[for="release-track"],
+label[for="game-mode"] {
   font-size: 14px;
   font-weight: 600;
 }
@@ -1716,4 +1718,13 @@ body #main-action[data-progress] > .action-arrow {
 }
 .launch-panel .session-note {
   margin-top: 10px;
+}
+
+.mode-note {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(80, 160, 255, 0.1);
+  border: 1px solid rgba(80, 160, 255, 0.4);
+  font-size: 13px;
 }
