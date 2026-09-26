@@ -9,7 +9,7 @@
     &nbsp; · &nbsp;
     <a href="https://github.com/tearded/tpf-multiplayer-launcher/issues">Report an issue</a>
   </p>
-  <p><sub>Windows 10 / 11 · 64-bit · English</sub></p>
+  <p><sub>Windows 10 / 11 · Linux (native or Proton) · 64-bit · English</sub></p>
 </div>
 
 ![Launcher 1.1.0 preview with the Transport Fever 2 Multiplayer wordmark, a launcher update notification, installation controls and game folder bar over a full-width Transport Fever 2 city background](docs/images/launcher-preview.jpg)
@@ -27,6 +27,15 @@ Requirements: Windows 10/11 x64, Steam, and Transport Fever 2 Steam build 35924.
 3. Everyone in a multiplayer session must use the same mod version.
 
 When GitHub is unavailable, an installed multiplayer version can still be started.
+
+### On Linux
+
+Download the **.AppImage** from the same release, make it executable (`chmod +x`) and start it. It works for both ways Linux runs Transport Fever 2:
+
+- **Native** (Steam's Linux build): the launcher installs the release's Linux package with its own `install.sh`, which adds a small preload block to the game's `run.sh`, so no Steam launch options are needed. A Steam update or file check restores `run.sh`; **Play** puts the block back from the downloaded release before starting the game.
+- **Proton** (the Windows build): the launcher installs the release's Proton files with its `install_proton.py`, which needs `python3`.
+
+**Settings > Game type** picks which one to install for: *Automatic* follows how Steam runs the game. To switch, choose the type here and change **Properties > Compatibility** in Steam; the launcher shows what Steam still needs and waits until Steam has switched and downloaded that build. Native, Snap and Flatpak Steam are all found, in every Steam library. Downloaded packages are kept in `~/.local/share/tpf2mp-launcher/Downloads` (the backup limit in Settings applies to them).
 
 ## What it does
 
@@ -69,6 +78,8 @@ Multiplayer releases are fetched exclusively from `silver2127/tpf2-multiplayer`.
 <summary><strong>Build and run from source</strong></summary>
 
 Requires Node.js 24, Rust (pinned in `rust-toolchain.toml`), MSVC Build Tools with the Windows SDK, and .NET Framework 4.x. The UI uses Tauri 2 / WebView2, with a C# helper for installation and profiles.
+
+On Linux the C# helper is replaced by `src-tauri/src/linux.rs` (same actions, same JSON to the UI). Requires Node.js 24, Rust and the WebKitGTK development packages (Debian/Ubuntu: `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev patchelf`). `npm run desktop` runs it; `npx tauri build --bundles appimage` makes the AppImage (`src-tauri/tauri.linux.conf.json` holds the Linux build settings).
 
 ```powershell
 npm ci

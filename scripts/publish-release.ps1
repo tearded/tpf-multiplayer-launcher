@@ -18,6 +18,8 @@ foreach ($entry in @($releases | Where-Object { -not $_.draft -and -not $_.prere
     if ([version]$entry.tag_name.Substring(1) -ge [version]$version) { throw 'New version must be newer than existing releases' }
 }
 $assets = @("release/$assetName", "release/$assetName.sig", 'release/latest.json', 'release/SHA256SUMS.txt')
+$linuxName = "TPF2-Multiplayer-Launcher-$version-x86_64.AppImage"
+if (Test-Path -LiteralPath "release/$linuxName") { $assets += @("release/$linuxName", "release/$linuxName.sig") }
 foreach ($asset in $assets) { if (-not (Test-Path -LiteralPath $asset)) { throw "Missing release asset $asset" } }
 gh release create $tag --repo $repo --verify-tag --draft --title "$version" --notes-file "docs/releases/$version.md" @assets
 if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release' }

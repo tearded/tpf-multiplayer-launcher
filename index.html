@@ -208,6 +208,7 @@
                 <span class="status-dot" aria-hidden="true"></span>
                 <span class="connection-status">Checking installation…</span>
               </div>
+              <p class="mode-note" id="mode-note" hidden></p>
               <p class="session-note">
                 Everyone in your session needs the same mod version.
               </p>
@@ -249,6 +250,19 @@
           <svg aria-hidden="true"><use href="#close" /></svg>
         </button>
       </div>
+      <section class="setting-group" id="game-mode-group" hidden>
+        <label for="game-mode">Game type (Linux)</label>
+        <select id="game-mode">
+          <option value="0">Automatic (as Steam runs it)</option>
+          <option value="1">Native Linux</option>
+          <option value="2">Proton (Windows build)</option>
+        </select>
+        <p>
+          Steam decides which build runs: Properties &gt; Compatibility. The
+          launcher installs multiplayer for the type chosen here.
+        </p>
+        <p id="game-mode-feedback" role="status"></p>
+      </section>
       <section class="setting-group">
         <label for="release-track">Multiplayer releases</label>
         <select id="release-track">
@@ -308,7 +322,7 @@
           </div>
           <div>
             <dt>Platform</dt>
-            <dd>Windows</dd>
+            <dd id="platform-name">Windows</dd>
           </div>
         </dl>
         <p class="settings-credit">

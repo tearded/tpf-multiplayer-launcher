@@ -94,6 +94,8 @@ function render() {
           ? "Game is running"
           : status.recovery
             ? "Restore previous installation"
+            : status.modeNote
+              ? "Change the Steam setting first"
             : !status.gameFolder
               ? "Select game folder"
               : same || (!offer && supported)
@@ -114,7 +116,8 @@ function render() {
       "href",
       same || (!offer && supported) ? "#play" : "#download",
     );
-  $("main-action").disabled = busy || Boolean(status?.running);
+  // Linux: Steam still runs the other build (the note says what to change)
+  $("main-action").disabled = busy || Boolean(status?.running) || Boolean(status?.modeNote);
   $("main-action").setAttribute("aria-busy", String(busy));
   // The main button doubles as the progress bar while an operation runs.
   if (busy && progress) {
@@ -127,7 +130,8 @@ function render() {
     !supported ||
     !status?.gameFolder ||
     status?.running ||
-    status?.recovery;
+    status?.recovery ||
+    Boolean(status?.modeNote);
   ["check-game", "open-folder", "open-backups"].forEach(
     (id) => ($(id).disabled = busy),
   );
@@ -155,6 +159,19 @@ function render() {
     $("backup-limit").disabled = busy || !status;
     $("backup-limit").value = String(status?.backupLimit ?? 5);
   }
+  // Linux: which game type the launcher installs for, what Steam still needs, or
+  // that Steam restored the game's start script (Play repairs it)
+  $("game-mode-group").hidden = status?.platform !== "linux";
+  $("game-mode").disabled = busy || !status || Boolean(status?.running);
+  $("game-mode").value = { native: "1", proton: "2" }[status?.modeChoice] || "0";
+  const linuxNote = status?.modeNote || status?.startScriptNote || "";
+  $("mode-note").hidden = !linuxNote;
+  $("mode-note").textContent = linuxNote;
+  if ($("platform-name"))
+    $("platform-name").textContent =
+      status?.platform === "linux"
+        ? `Linux${status.mode === "proton" ? " (Proton)" : status.mode === "native" ? " (native)" : ""}`
+        : "Windows";
   $("confirm-install").disabled =
     busy || (!offer && !pendingInstallVersion) || Boolean(status?.running);
 }
@@ -417,7 +434,7 @@ export async function initializeDesktop() {
   $("confirm-install").addEventListener("click", performInstall);
   $("uninstall-mod")?.addEventListener("click", () => {
     $("uninstall-message").textContent =
-      `Multiplayer${installed ? ` ${installed.version}` : ""} will be removed and the original game files restored. Windows may ask for administrator permission.`;
+      `Multiplayer${installed ? ` ${installed.version}` : ""} will be removed and the original game files restored.${status?.platform === "linux" ? "" : " Windows may ask for administrator permission."}`;
     $("uninstall-dialog").showModal();
   });
   $("confirm-uninstall")?.addEventListener("click", uninstall);
@@ -492,6 +509,20 @@ export async function initializeDesktop() {
       }
     }),
   );
+  $("game-mode")?.addEventListener("change", (event) => {
+    const selected = event.target.value;
+    task(async () => {
+      try {
+        acceptStatus(await native("game-mode", { value: selected }));
+        $("game-mode-feedback").textContent = status.modeNote
+          ? "Saved. Steam still needs the change shown on the main page."
+          : "Saved. Nothing was installed.";
+        await fetchOffer();
+      } catch (error) {
+        $("game-mode-feedback").textContent = String(error);
+      }
+    });
+  });
   $("release-track")?.addEventListener("change", (event) => {
     const selected = event.target.value;
     task(async () => {
