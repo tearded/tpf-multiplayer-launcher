@@ -128,9 +128,11 @@ public static class Updater {
         if (selected != null) await WithPackages(selected);
         return selected;
     }
-    // Not a mod version: a launcher update (tagged launcher-v<version>), or the copy
-    // of a version's install files tagged without the "v" (0.7.0.6 beside v0.7.0.6)
-    // that the mod repository keeps for launchers before 1.3.0, which only look there.
+    // Not a mod version: a launcher update (tagged launcher-v<version>), or a version's
+    // download page tagged without the "v" (0.7.0.6 beside v0.7.0.6). From 0.7.0.6 the
+    // page players open carries the two launchers; v<version>, published after it, is
+    // the release with the install files, the one every launcher resolves (launchers
+    // up to 1.2.0 take the newest published release, then look v<version> up first).
     internal static bool Listed(Release r, System.Collections.Generic.ICollection<string> tags) {
         if (r == null || r.draft) return false;
         string tag = r.tag_name ?? "";

@@ -152,24 +152,26 @@ public static class UnitTests {
         Check(summary.Contains("release-autumn") && summary.Contains("\"installable\":false"),"unsupported release remains visible with installation reason");
         var missing=new Release{tag_name="v0.7",published_at="2026-09-24T10:00:00Z"};
         Check(Updater.SelectRelease(new[]{old,missing},false)==missing && missing.InstallationIssue!=null,"missing MSI does not hide newest release");
-        // 0.7.0.6 on: the mod release carries the launchers, the install files are in the
-        // packages repository, and the mod repository keeps a copy tagged without the "v"
-        // for launchers before 1.3.0, published after it; launcher updates are launcher-v*.
-        var twoLaunchers=new Release{tag_name="v0.7.0.6",published_at="2026-09-27T10:00:00Z"};
-        var legacyCopy=new Release{tag_name="0.7.0.6",published_at="2026-09-27T10:01:00Z"};
+        // 0.7.0.6 on: the page players open is tagged without the "v" and carries the two
+        // launchers; v<version>, published after it, has the install files; launcher
+        // updates are launcher-v*.
+        var launcherPage=new Release{tag_name="0.7.0.6",published_at="2026-09-27T10:00:00Z"};
+        var installFiles=new Release{tag_name="v0.7.0.6",published_at="2026-09-27T10:01:00Z"};
         var launcherUpdate=new Release{tag_name="launcher-v1.3.0",published_at="2026-09-28T10:00:00Z"};
-        Check(Updater.SelectRelease(new[]{old,twoLaunchers,legacyCopy,launcherUpdate},false)==twoLaunchers,"the legacy install-file copy and launcher updates are not mod versions");
-        Check(Updater.SelectRelease(new[]{old,legacyCopy},false)==legacyCopy,"a tag without v and without a v twin is still a release");
+        Check(Updater.SelectRelease(new[]{old,launcherPage,installFiles,launcherUpdate},false)==installFiles,"the launcher page and launcher updates are not mod versions");
+        var pageLater=new Release{tag_name="0.7.0.6",published_at="2026-09-27T10:02:00Z"};
+        Check(Updater.SelectRelease(new[]{old,installFiles,pageLater},false)==installFiles,"the page beside its v twin is skipped whichever was published last");
+        Check(Updater.SelectRelease(new[]{old,launcherPage},false)==launcherPage,"a tag without v and without a v twin is still a release");
         var msiAt=new Func<string,Asset>(repo=>new Asset{name="TpF2Multiplayer.msi",size=1,digest="sha256:"+new string('b',64),browser_download_url="https://github.com/"+repo+"/releases/download/v0.7.0.6/TpF2Multiplayer.msi"});
-        Reject(()=>twoLaunchers.Validate(),"a two-launcher release alone has no MSI");
-        Updater.UsePackages(twoLaunchers,new Release{tag_name="v0.7.0.5",assets=new[]{msiAt(Updater.PackagesRepository)}});
-        Check(twoLaunchers.AssetsRepository==Updater.Repository,"packages of another tag are not taken");
-        Updater.UsePackages(twoLaunchers,new Release{tag_name="v0.7.0.6",assets=new[]{msiAt(Updater.PackagesRepository)}});
-        twoLaunchers.Validate();Check(twoLaunchers.AssetsRepository==Updater.PackagesRepository,"install files from the packages release with the same tag");
-        twoLaunchers.assets=new[]{msiAt(Updater.Repository)};
-        Reject(()=>twoLaunchers.Validate(),"a packages release must link its own files");
-        twoLaunchers.assets=new[]{msiAt("tearded/tpf2-multiplayer-packages")};
-        Reject(()=>twoLaunchers.Validate(),"packages from another account rejected");
+        Reject(()=>installFiles.Validate(),"a release without the MSI is not installable");
+        Updater.UsePackages(installFiles,new Release{tag_name="v0.7.0.5",assets=new[]{msiAt(Updater.PackagesRepository)}});
+        Check(installFiles.AssetsRepository==Updater.Repository,"packages of another tag are not taken");
+        Updater.UsePackages(installFiles,new Release{tag_name="v0.7.0.6",assets=new[]{msiAt(Updater.PackagesRepository)}});
+        installFiles.Validate();Check(installFiles.AssetsRepository==Updater.PackagesRepository,"install files from the packages release with the same tag");
+        installFiles.assets=new[]{msiAt(Updater.Repository)};
+        Reject(()=>installFiles.Validate(),"a packages release must link its own files");
+        installFiles.assets=new[]{msiAt("tearded/tpf2-multiplayer-packages")};
+        Reject(()=>installFiles.Validate(),"packages from another account rejected");
         foreach(string version in new[]{"v0.6.1.1-beta","1","1.0.0.0.1","0.6.1.999999999999999999","1.0.0\n"})Reject(()=>Updater.ParseVersion(version),"invalid version");
         foreach(string path in new[]{"../outside.dll","C:/Windows/file.dll","plugins/other.dll","alut_real.dll","mods/mp_lockstep_1/../other.lua","mods/mp_lockstep_1/test.lua:stream"})
             Reject(()=>ProfileStore.SafePath(Path.GetTempPath(),path),"path restriction "+path);

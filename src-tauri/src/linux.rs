@@ -375,9 +375,9 @@ pub fn with_packages(mut release: Value, assets: Option<Value>) -> Value {
 }
 
 /// A release of the mod: not a launcher update (its own release in the mod repo,
-/// tagged `launcher-v<version>`), and not the copy of a version's install files
-/// tagged without the "v" (`0.7.0.6` beside `v0.7.0.6`) that the mod repo keeps
-/// for Windows launchers before 1.3.0. `tags` are the tags of the same listing.
+/// tagged `launcher-v<version>`), and not a version's download page tagged without
+/// the "v" (`0.7.0.6` beside `v0.7.0.6`): from 0.7.0.6 that page carries the two
+/// launchers and `v<version>` the install files. `tags` are the listing's tags.
 pub fn is_mod_release(release: &Value, tags: &std::collections::HashSet<String>) -> bool {
     let tag = release["tag_name"].as_str().unwrap_or("");
     !release["draft"].as_bool().unwrap_or(false) && !tag.starts_with("launcher-")
@@ -802,11 +802,14 @@ mod tests {
         assert_eq!(select_release(&[c.clone(), launcher_beta.clone()], true).unwrap()["tag_name"], "v0.7.1");
         let all = tags_of(&[launcher.clone(), launcher_beta.clone(), b.clone()]);
         assert!(!is_mod_release(&launcher, &all) && !is_mod_release(&launcher_beta, &all) && is_mod_release(&b, &all));
-        // the install-file copy for old launchers, published after its v twin, is not a version
-        let mut d = release("v0.7.0.6", "0.7.0.6", false, &[]); d["published_at"] = json!("2026-09-28T00:00:00Z");
-        let mut copy = release("0.7.0.6", "0.7.0.6 install files", false, &[]); copy["published_at"] = json!("2026-09-28T00:01:00Z");
-        assert_eq!(select_release(&[b.clone(), d.clone(), copy.clone()], false).unwrap()["tag_name"], "v0.7.0.6");
-        assert_eq!(select_release(&[b.clone(), copy.clone()], false).unwrap()["tag_name"], "0.7.0.6");
+        // the two-launcher page tagged without the "v" is not a version beside its v twin
+        // (the install files), whichever of the two was published last
+        let mut files = release("v0.7.0.6", "0.7.0.6 install files", false, &[]); files["published_at"] = json!("2026-09-28T00:01:00Z");
+        let mut page = release("0.7.0.6", "0.7.0.6", false, &[]); page["published_at"] = json!("2026-09-28T00:00:00Z");
+        assert_eq!(select_release(&[b.clone(), page.clone(), files.clone()], false).unwrap()["tag_name"], "v0.7.0.6");
+        page["published_at"] = json!("2026-09-28T00:02:00Z");
+        assert_eq!(select_release(&[b.clone(), page.clone(), files.clone()], false).unwrap()["tag_name"], "v0.7.0.6");
+        assert_eq!(select_release(&[b.clone(), page.clone()], false).unwrap()["tag_name"], "0.7.0.6");
     }
     #[test] fn process_scan_runs() { let _ = game_running(); }
     #[test] fn start_script_mark() {
