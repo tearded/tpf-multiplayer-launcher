@@ -336,6 +336,8 @@ async function mainAction() {
         : "Install multiplayer?";
     $("install-message").textContent =
       `Multiplayer ${offer.version} will be installed${installed ? ` over version ${installed.version}` : ""}, then the game will start. Everyone in your session needs the same version.`;
+    if (status?.platform === "linux")
+      $("install-note").textContent = "Your saves and other mods are kept.";
     $("install-dialog").showModal();
     return;
   }
@@ -435,6 +437,9 @@ export async function initializeDesktop() {
   $("uninstall-mod")?.addEventListener("click", () => {
     $("uninstall-message").textContent =
       `Multiplayer${installed ? ` ${installed.version}` : ""} will be removed and the original game files restored.${status?.platform === "linux" ? "" : " Windows may ask for administrator permission."}`;
+    if (status?.platform === "linux")
+      $("uninstall-note").textContent =
+        "Your saves and other mods are kept. You can install multiplayer again at any time.";
     $("uninstall-dialog").showModal();
   });
   $("confirm-uninstall")?.addEventListener("click", uninstall);
