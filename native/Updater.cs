@@ -22,6 +22,9 @@ public class Release {
     public string tag_name { get; set; }
     public string name { get; set; }
     [ScriptIgnore] public bool AllowExperimental;
+    // Where this release's MSI is published: the release with the same tag in the
+    // packages repository (Silver 0.7.0.6 and later), else the release itself.
+    [ScriptIgnore] public string PackageSource = Updater.Repository;
     [ScriptIgnore] public bool Experimental { get { return prerelease || Regex.IsMatch(name ?? "", @"\b(experimental|alpha|beta|preview|rc)\b", RegexOptions.IgnoreCase); } }
     public string body { get; set; }
     public string published_at { get; set; }
@@ -51,7 +54,8 @@ public class Release {
     public void Validate() {
         if (draft || (Experimental && !AllowExperimental) || Number == null) throw new InvalidDataException("This is not a supported stable Silver release.");
         var asset = Package;
-        if (asset.browser_download_url != "https://github.com/" + Updater.Repository + "/releases/download/" + tag_name + "/TpF2Multiplayer.msi" ||
+        if ((PackageSource != Updater.Repository && PackageSource != Updater.PackageRepository) ||
+            asset.browser_download_url != "https://github.com/" + PackageSource + "/releases/download/" + tag_name + "/TpF2Multiplayer.msi" ||
             asset.digest == null || !Regex.IsMatch(asset.digest, @"\Asha256:[0-9a-fA-F]{64}\z") || asset.size <= 0 || asset.size > 536870912)
             throw new InvalidDataException("The download URL, size or SHA-256 checksum is missing or invalid.");
     }
@@ -69,6 +73,9 @@ public sealed class HttpDownload : WebClient {
 public static class Updater {
     // The only release source; the launcher never installs builds from other repositories.
     public const string Repository = "silver2127/tpf2-multiplayer";
+    // Since Silver 0.7.0.6 a release shows only the launchers, and its install files are in
+    // a release with the same tag here. Releases up to 0.7.0.5 keep their MSI themselves.
+    public const string PackageRepository = "silver2127/tpf2-multiplayer-packages";
     // An elevated helper may run as a different Windows account; it then receives
     // the invoking user's local data folder instead of using its own.
     public static string LocalData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -117,7 +124,33 @@ public static class Updater {
             if (releases.Length < 100) break;
             if (page == 10) throw new InvalidDataException("Release list is too large to determine the latest version safely.");
         }
-        return SelectRelease(candidates, experimental);
+        var selected = SelectRelease(candidates, experimental);
+        if (selected != null) UsePackages(selected, await PackageReleases());
+        return selected;
+    }
+    // A release with the same tag in the packages repository carries the install files of that
+    // release (a draft or an empty one does not count). Only the tag decides, and only these two
+    // repositories are ever sources (Release.Validate).
+    internal static void UsePackages(Release release, System.Collections.Generic.IDictionary<string, Release> packages) {
+        Release package;
+        if (release == null || packages == null || release.tag_name == null || !packages.TryGetValue(release.tag_name, out package)) return;
+        if (package == null || package.draft || package.tag_name != release.tag_name || package.assets == null || package.assets.Length == 0) return;
+        release.assets = package.assets;
+        release.PackageSource = PackageRepository;
+    }
+    // The packages repository's releases by tag: one listing per check instead of one request per
+    // release (GitHub allows 60 unauthenticated requests an hour). None yet, or GitHub unreachable:
+    // an empty map, and each release keeps the files it carries itself.
+    internal static async Task<System.Collections.Generic.Dictionary<string, Release>> PackageReleases() {
+        var map = new System.Collections.Generic.Dictionary<string, Release>(StringComparer.Ordinal);
+        try {
+            for (int page=1; page<=5; page++) {
+                var releases = await FetchReleasePage(page, 100, PackageRepository);
+                foreach (var release in releases) if (release != null && release.tag_name != null && !map.ContainsKey(release.tag_name)) map[release.tag_name] = release;
+                if (releases.Length < 100) break;
+            }
+        } catch (WebException) { } catch (TimeoutException) { } catch (InvalidDataException) { }
+        return map;
     }
     internal static Release SelectRelease(System.Collections.Generic.IEnumerable<Release> releases, bool experimental) {
         var selected = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
@@ -130,9 +163,9 @@ public static class Updater {
         return DateTimeOffset.TryParse(release.published_at, System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.AssumeUniversal, out date) ? date : DateTimeOffset.MinValue;
     }
-    static async Task<Release[]> FetchReleasePage(int page, int count) {
+    static async Task<Release[]> FetchReleasePage(int page, int count, string repository = Repository) {
         using (var client = new HttpDownload()) {
-            var job=client.DownloadStringTaskAsync("https://api.github.com/repos/" + Repository + "/releases?per_page="+count+"&page="+page);
+            var job=client.DownloadStringTaskAsync("https://api.github.com/repos/" + repository + "/releases?per_page="+count+"&page="+page);
             if(await Task.WhenAny(job,Task.Delay(45000))!=job){client.CancelAsync();throw new TimeoutException("GitHub did not respond. Try again later.");}
             var releases=new JavaScriptSerializer{MaxJsonLength=8388608}.Deserialize<Release[]>(await job);
             if(releases==null)throw new InvalidDataException("Empty response from GitHub.");
@@ -148,6 +181,8 @@ public static class Updater {
                     if (await Task.WhenAny(job, Task.Delay(45000)) != job) { client.CancelAsync(); throw new TimeoutException("GitHub did not respond. Try again later."); }
                     var release = new JavaScriptSerializer().Deserialize<Release>(await job);
                     if (release == null || release.Number.ToString() != version) throw new InvalidDataException("The requested release does not match.");
+                    var package = await FetchPackageRelease(release.tag_name);
+                    if (package != null) UsePackages(release, new System.Collections.Generic.Dictionary<string, Release> { { release.tag_name, package } });
                     release.AllowExperimental=allowExperimental; release.Validate(); return release;
                 } catch (WebException ex) {
                     var response = ex.Response as HttpWebResponse;
@@ -157,9 +192,25 @@ public static class Updater {
         }
         throw new InvalidDataException("This release is no longer available.");
     }
+    // The packages repository's release for one tag, or null (none, or 0.7.0.5 and older).
+    static async Task<Release> FetchPackageRelease(string tag) {
+        using (var client = new HttpDownload()) {
+            try {
+                var job = client.DownloadStringTaskAsync("https://api.github.com/repos/" + PackageRepository + "/releases/tags/" + tag);
+                if (await Task.WhenAny(job, Task.Delay(45000)) != job) { client.CancelAsync(); throw new TimeoutException("GitHub did not respond. Try again later."); }
+                return new JavaScriptSerializer().Deserialize<Release>(await job);
+            } catch (WebException ex) {
+                var response = ex.Response as HttpWebResponse;
+                if (response == null || response.StatusCode != HttpStatusCode.NotFound) throw;
+                return null;
+            }
+        }
+    }
     public static async Task<object> History(int page, bool experimental = false) {
         if (page < 1 || page > 10000) throw new InvalidDataException("Invalid history page.");
         var releases=await FetchReleasePage(page,20);
+        var packages=await PackageReleases();
+        foreach (var release in releases) UsePackages(release, packages);
         var entries = releases.Where(r => r != null && !r.draft && r.Experimental == experimental)
             .Select(r => { r.AllowExperimental=experimental; return r.Summary(); }).ToArray();
         return new {entries=entries,hasMore=releases.Length==20};
