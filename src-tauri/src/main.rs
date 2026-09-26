@@ -13,7 +13,7 @@ struct Reset(Arc<AtomicBool>);
 impl Drop for Reset { fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); } }
 
 fn allowed(action: &str) -> bool {
-    matches!(action, "status" | "fetch" | "install" | "recover" | "play" | "game-folder" | "choose-folder" | "backups" | "release-page" | "release-link" | "backup-limit" | "history" | "release-track")
+    matches!(action, "status" | "fetch" | "install" | "uninstall" | "recover" | "play" | "game-folder" | "choose-folder" | "backups" | "release-page" | "release-link" | "backup-limit" | "history" | "release-track")
 }
 
 fn valid_release_link(value: &str) -> bool {
@@ -25,7 +25,7 @@ fn valid_release_link(value: &str) -> bool {
 // Everything else finishes quickly, so a stuck helper must not hold the operation lock forever.
 fn time_limit(action: &str) -> Option<Duration> {
     match action {
-        "install" | "recover" | "choose-folder" => None,
+        "install" | "uninstall" | "recover" | "choose-folder" => None,
         "fetch" | "history" => Some(Duration::from_secs(600)),
         _ => Some(Duration::from_secs(60)),
     }
@@ -145,7 +145,7 @@ mod tests {
         for value in ["file:///C:/Windows/test.exe", "https://github.com/other/repository/", "https://github.com@evil.com/silver2127/tpf2-multiplayer/", "https://github.com/silver2127/tpf2-multiplayer/../../../other", "https://github.com/silver2127/tpf2-multiplayer-evil/"] { assert!(!super::valid_release_link(value)); }
     }
     #[test] fn only_quick_operations_are_time_limited() {
-        for action in ["install", "recover", "choose-folder"] { assert!(super::time_limit(action).is_none()); }
+        for action in ["install", "uninstall", "recover", "choose-folder"] { assert!(super::time_limit(action).is_none()); }
         for action in ["status", "fetch", "play"] { assert!(super::time_limit(action).is_some()); }
     }
     #[test] fn process_list_is_readable() { assert!(super::game_running().is_ok()); }

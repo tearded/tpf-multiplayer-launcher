@@ -34,7 +34,8 @@ When GitHub is unavailable, an installed multiplayer version can still be starte
 | :--- | :--- |
 | **Install & play** | Verify the package, back up the current mod, install Silver and launch through Steam. |
 | **Stable or Experimental** | Choose your release track in Settings. Experimental installs ask for confirmation. |
-| **Previous releases** | Browse release history and install an older, verifiable version when your group needs it. |
+| **Previous releases** | Click **Install a different version** to browse release history and install an older, verifiable version when your group needs it. |
+| **Remove multiplayer** | Uninstall the mod from Settings. The original game files are restored; saves, other mods and backups are kept. |
 | **Backups you control** | Keep 1, 3, 5, 10 or unlimited historical backups. Five is the default. |
 | **Separate update checks** | Check both the multiplayer mod and the launcher. Launcher updates appear in Settings and install only when you choose. |
 | **Recovery** | Restore managed mod files after an interrupted installation. Saves and unrelated mods are preserved. |
@@ -44,7 +45,7 @@ When GitHub is unavailable, an installed multiplayer version can still be starte
 <details>
 <summary><strong>Release history and older versions</strong></summary>
 
-Expand **Release history** below the current patchnotes to browse older Silver releases for the selected track, with dates and original notes. **Load more releases** retrieves the next page. Each release can be installed after confirmation; the latest available version remains displayed separately. Historical packages must pass the same checksum, source and compatibility checks, so some old releases without verifiable packages cannot be installed.
+Click **Install a different version** below the play buttons, or expand **Release history** below the current patchnotes, to browse older Silver releases for the selected track, with dates and original notes. **Load more releases** retrieves the next page. Each release can be installed after confirmation; the latest available version remains displayed separately. Historical packages must pass the same checksum, source and compatibility checks, so some old releases without verifiable packages cannot be installed.
 
 </details>
 

@@ -54,6 +54,12 @@
           <path d="M4 8v12h16V8M9 12h6" />
           <rect x="3" y="3" width="18" height="5" rx="1" />
         </symbol>
+        <symbol id="trash" viewBox="0 0 24 24">
+          <path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+        </symbol>
+        <symbol id="history" viewBox="0 0 24 24">
+          <path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5M12 7v5l3 3" />
+        </symbol>
         <symbol id="close" viewBox="0 0 24 24">
           <path d="m6 6 12 12M6 18 18 6" />
         </symbol>
@@ -146,7 +152,7 @@
                   <use href="#external" /></svg
               ></a>
               <div class="release-history">
-                <h3>Release history</h3>
+                <h3 id="history-title" tabindex="-1">Release history</h3>
                 <div id="history-list"></div>
                 <p id="history-status" role="status"></p>
                 <button class="quiet-button" id="load-history">
@@ -193,11 +199,14 @@
                   <svg aria-hidden="true"><use href="#play" /></svg>Play
                   installed version
                 </button>
+                <button class="quiet-button secondary-play" id="choose-version">
+                  <svg aria-hidden="true"><use href="#history" /></svg>Install
+                  a different version
+                </button>
               </div>
               <div class="operation-status" role="status" aria-live="polite" aria-atomic="true">
                 <span class="status-dot" aria-hidden="true"></span>
                 <span class="connection-status">Checking installation…</span>
-                <progress id="operation-progress" aria-label="Installation progress" hidden></progress>
               </div>
               <p class="session-note">
                 Everyone in your session needs the same mod version.
@@ -222,7 +231,9 @@
             <button class="quiet-button" id="open-folder">
               <svg aria-hidden="true"><use href="#folder" /></svg>Open folder</button
             ><button class="quiet-button" id="open-backups">
-              <svg aria-hidden="true"><use href="#archive" /></svg>Backups
+              <svg aria-hidden="true"><use href="#archive" /></svg>Backups</button
+            ><button class="quiet-button" id="uninstall-mod">
+              <svg aria-hidden="true"><use href="#trash" /></svg>Remove multiplayer
             </button>
           </div>
         </section>
@@ -326,6 +337,29 @@
         <button class="quiet-button close-dialog">Cancel</button
         ><button id="confirm-install" class="primary-button">
           Install multiplayer
+        </button>
+      </div>
+    </dialog>
+    <dialog id="uninstall-dialog" aria-labelledby="uninstall-title">
+      <div class="dialog-heading">
+        <h2 id="uninstall-title">Remove multiplayer?</h2>
+        <button class="icon-button close-dialog" aria-label="Cancel removal">
+          <svg aria-hidden="true"><use href="#close" /></svg>
+        </button>
+      </div>
+      <p id="uninstall-message">
+        The multiplayer mod will be removed and the original game files
+        restored. Windows may ask for administrator permission.
+      </p>
+      <p class="muted">
+        The current mod files are backed up first. Your saves and other mods
+        are kept. You can install multiplayer again at any time. To remove the
+        launcher itself afterwards, use Windows Settings › Apps.
+      </p>
+      <div class="dialog-actions">
+        <button class="quiet-button close-dialog">Cancel</button
+        ><button id="confirm-uninstall" class="primary-button danger-button">
+          Remove multiplayer
         </button>
       </div>
     </dialog>

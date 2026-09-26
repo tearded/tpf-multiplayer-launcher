@@ -63,12 +63,39 @@ $("main-action").addEventListener("click", () => {
   $("install-title").textContent = "Update multiplayer";
   $("install-message").textContent =
     "The desktop app backs up the current mod files, installs multiplayer, and starts the game through Steam. This preview does not change any files.";
-  $("confirm-install").textContent = "Close preview";
+  $("confirm-install").textContent = "Simulate installation";
   $("install-dialog").showModal();
 });
-$("confirm-install").addEventListener("click", () =>
-  $("install-dialog").close(),
-);
+// Simulated progress with the same button states as the desktop app.
+function simulateInstall() {
+  const button = $("main-action"),
+    label = button.querySelector("span"),
+    status = document.querySelector(".connection-status");
+  const steps = [];
+  for (let percent = 4; percent <= 100; percent += 4)
+    steps.push([`Downloading release… ${percent}%`, "known", percent]);
+  steps.push(["Backing up current files and installing release…", "unknown", 0]);
+  button.disabled = true;
+  status.textContent = "Keep the launcher open until this finishes.";
+  steps.forEach(([text, state, percent], index) =>
+    setTimeout(() => {
+      label.textContent = text;
+      button.dataset.progress = state;
+      button.style.setProperty("--progress", `${percent}%`);
+    }, index * 120),
+  );
+  setTimeout(() => {
+    delete button.dataset.progress;
+    button.disabled = false;
+    label.textContent = "Update & play";
+    status.textContent = "Preview · sample installation, no files will be changed";
+    toast("Preview: nothing was installed.");
+  }, steps.length * 120 + 2500);
+}
+$("confirm-install").addEventListener("click", () => {
+  $("install-dialog").close();
+  if ($("confirm-install").textContent === "Simulate installation") simulateInstall();
+});
 $("play-current").addEventListener("click", () =>
   toast(
     "Preview: the desktop app starts the installed multiplayer version through Steam.",
@@ -90,6 +117,14 @@ $("open-backups").addEventListener("click", () =>
   toast("The desktop app opens your saved mod backups in File Explorer."),
 );
 document.documentElement.dataset.ready = "true";
+
+$("uninstall-mod")?.addEventListener("click", () => {
+  $("uninstall-dialog").showModal();
+});
+$("confirm-uninstall")?.addEventListener("click", () => {
+  $("uninstall-dialog").close();
+  toast("Preview: the desktop app removes multiplayer and restores the original game files.");
+});
 
 $("backup-limit")?.addEventListener("change", () => {
   $("backup-feedback").textContent = "Preview only. No backups are changed.";

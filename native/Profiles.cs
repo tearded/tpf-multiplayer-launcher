@@ -109,6 +109,8 @@ public sealed class ProfileStore {
         if (File.Exists(file)) File.Replace(temp, file, null); else File.Move(temp, file);
     }
     public void Save() { Write(StateFile, State); }
+    // After removing multiplayer, the next installation starts over; saved profiles remain as backups.
+    public void Forget() { if (File.Exists(StateFile)) File.Delete(StateFile); State = null; }
     public static string Hash(string file) {
         using (var stream = File.OpenRead(file)) using (var hash = SHA256.Create())
             return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "");
@@ -259,14 +261,15 @@ public sealed class ProfileStore {
         if (State == null || RecoveryPending || Matches(Active, State.GameFolder)) return;
         SaveLocalChanges();
     }
-    public async Task<Profile> PrepareRelease(Release release, Action<int> progress) {
+    public async Task<Profile> PrepareRelease(Release release, Action<string,int> progress) {
         release.Validate();
         string cached = State.Official;
         if (cached != null) {
             var existing = Load(cached);
             if (existing.Version == release.Number.ToString() && existing.PackageHash == release.Package.digest) { Verify(existing); return existing; }
         }
-        string package = await Updater.Download(release, progress);
+        string package = await Updater.Download(release, p => progress("Downloading release…", p));
+        progress("Unpacking release…", 0);
         LauncherSetup.ValidateMsi(package,release);
         // MSI still has legacy MAX_PATH limits, so keep administrative staging short.
         string stage = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tpf2-" + Guid.NewGuid().ToString("N").Substring(0,12)); Directory.CreateDirectory(stage);

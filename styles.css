@@ -427,6 +427,12 @@ h2 {
   width: 13px;
   height: 13px;
 }
+.secondary-play + .secondary-play {
+  margin-top: 8px;
+}
+#history-title:focus {
+  outline: none;
+}
 .session-note {
   font-size: 10px;
   color: #95a8ad;
@@ -1628,4 +1634,86 @@ label[for="release-track"] {
 }
 #launcher-update-badge:hover {
   background: #e4f8df;
+}
+
+/* Destructive actions, such as removing multiplayer. */
+body button.danger-button {
+  color: #f0a79d;
+  border-color: #f0a79d55;
+}
+body button.danger-button:not(:disabled):hover {
+  background: #f0a79d1a;
+  border-color: #f0a79d;
+}
+body button.primary-button.danger-button {
+  color: #2a0f0b;
+  background: #f0a79d;
+  border-color: #f0a79d;
+}
+body button.primary-button.danger-button:not(:disabled):hover {
+  background: #f6c2ba;
+}
+
+/* Progress lives in the main button: it fills while downloading and pulses while
+   the step has no measurable progress. */
+body #main-action[data-progress] {
+  opacity: 1;
+  cursor: progress;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--raised) 80%, transparent);
+}
+body #main-action[data-progress="known"] {
+  background:
+    linear-gradient(var(--accent), var(--accent)) 0 100% / var(--progress) 4px
+      no-repeat,
+    linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--accent) 22%, transparent) var(--progress),
+        transparent var(--progress)
+      ),
+    color-mix(in srgb, var(--raised) 80%, transparent);
+}
+body #main-action[data-progress="unknown"] {
+  background:
+    linear-gradient(var(--accent), var(--accent)) 0 100% / 30% 4px no-repeat,
+    color-mix(in srgb, var(--raised) 80%, transparent);
+  animation: progress-sweep 1.4s ease-in-out infinite;
+}
+body #main-action[data-progress] > .action-arrow {
+  visibility: hidden;
+}
+#main-action > span {
+  font-variant-numeric: tabular-nums;
+}
+@keyframes progress-sweep {
+  from {
+    background-position: -45% 100%, 0 0;
+  }
+  to {
+    background-position: 145% 100%, 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body #main-action[data-progress="unknown"] {
+    animation: none;
+  }
+}
+
+/* A quiet one-line status below the actions. */
+.launch-panel .operation-status {
+  margin-top: 14px;
+  padding-top: 10px;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.launch-panel .status-dot {
+  margin-top: 6px;
+  width: 4px;
+  height: 4px;
+}
+.launch-panel .session-note {
+  margin-top: 10px;
 }

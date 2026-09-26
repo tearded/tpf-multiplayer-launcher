@@ -87,13 +87,13 @@ public static class NativeBridge {
                     throw new InvalidOperationException("Existing backups belong to a different game folder.");
                 if(store.State==null||store.Installed(game)==null) {
                     Progress("Setting up multiplayer…");
-                    await LauncherSetup.InstallBase(release,p=>Progress("Downloading multiplayer…",p));
+                    await LauncherSetup.InstallBase(release,Progress);
                     store.Initialize(Updater.GameFolder(),release.Number.ToString(),true);
                 }
-                Progress("Downloading and verifying release…");
-                var target=await store.PrepareRelease(release,p=>Progress("Downloading release…",p));
+                Progress("Checking release…");
+                var target=await store.PrepareRelease(release,Progress);
                 Updater.RequireClosed();
-                Progress("Backing up current files and installing release…");
+                Progress("Installing release…");
                 await LauncherSetup.Activate(store,target);
                 try { store.PruneBackups(); LauncherSetup.CleanDownloads(store.Root); }
                 catch (Exception) { Progress("Installed successfully. Some older backups could not be removed."); }
@@ -104,6 +104,10 @@ public static class NativeBridge {
                 if(!store.RecoveryPending)return Status(store);
                 var journal=ProfileStore.Read<SwitchJournal>(Path.Combine(store.Root,"switch-pending.json"));
                 await LauncherSetup.Activate(store,store.Load(journal.Restore));return Status(store);
+            }
+            case "uninstall": {
+                bool restart=await LauncherSetup.Uninstall(store,text=>Progress(text));
+                return new {status=Status(store),restartRequired=restart};
             }
             case "play":
                 var installed=store.Installed(Updater.GameFolder());

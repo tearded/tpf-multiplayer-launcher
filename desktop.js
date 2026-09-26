@@ -13,6 +13,8 @@ let pendingUpdate = null,
   updateChecking = false,
   launcherVersion = "";
 let pendingInstallVersion = null;
+// Latest helper progress while busy: { text, percent } (percent 0 = unknown).
+let progress = null;
 let historyPage = 1,
   historyHasMore = true;
 let toastTimer,
@@ -24,8 +26,10 @@ function toast(text) {
   $("toast").hidden = false;
   toastTimer = setTimeout(() => ($("toast").hidden = true), 6500);
 }
+// The status line only appears when there is something to report.
 function message(text) {
   document.querySelector(".connection-status").textContent = String(text);
+  document.querySelector(".operation-status").hidden = !text;
 }
 function setMainLabel(text) {
   $("main-action").querySelector("span").textContent = text;
@@ -81,7 +85,9 @@ function render() {
       : "unknown";
   setMainLabel(
     busy
-      ? "Working…"
+      ? progress
+        ? `${progress.text}${progress.percent > 0 ? ` ${progress.percent}%` : ""}`
+        : "Working…"
       : !status
         ? "Retry connection"
         : status.running
@@ -110,6 +116,11 @@ function render() {
     );
   $("main-action").disabled = busy || Boolean(status?.running);
   $("main-action").setAttribute("aria-busy", String(busy));
+  // The main button doubles as the progress bar while an operation runs.
+  if (busy && progress) {
+    $("main-action").dataset.progress = progress.percent > 0 ? "known" : "unknown";
+    $("main-action").style.setProperty("--progress", `${progress.percent}%`);
+  } else delete $("main-action").dataset.progress;
   $("play-current").hidden = same || !supported;
   $("play-current").disabled =
     busy ||
@@ -121,6 +132,13 @@ function render() {
     (id) => ($(id).disabled = busy),
   );
   if ($("load-history")) $("load-history").disabled = busy || !historyHasMore;
+  if ($("choose-version")) $("choose-version").disabled = busy;
+  if ($("uninstall-mod")) {
+    const removable = Boolean(installed || status?.initialized);
+    $("uninstall-mod").disabled =
+      busy || !removable || !status?.gameFolder || status.running || status.recovery;
+    $("confirm-uninstall").disabled = $("uninstall-mod").disabled;
+  }
   $("choose-folder").disabled = busy || Boolean(status?.running);
   $("launcher-install").disabled =
     busy || !pendingUpdate || Boolean(status?.running) || updateChecking;
@@ -174,7 +192,7 @@ async function refreshGameStatus(full = true) {
       message(
         status.running
           ? "Game is running. Close it before installing updates."
-          : "Game closed. Ready.",
+          : "Game closed.",
       );
   } catch {
     message("Could not check the game status. Try again.");
@@ -214,7 +232,7 @@ async function task(work) {
     toast(error);
   } finally {
     busy = false;
-    $("operation-progress").hidden = true;
+    progress = null;
     render();
   }
 }
@@ -234,7 +252,7 @@ async function checkGame() {
               ? "Install multiplayer to use this launcher. Your current mod files will be backed up."
               : offer?.installable === false
                 ? `Release ${offer.version} cannot be installed: ${offer.installationIssue}`
-                : "Ready.",
+                : "",
     );
   });
 }
@@ -305,6 +323,19 @@ async function mainAction() {
     return;
   }
   await performInstall();
+}
+async function uninstall() {
+  $("uninstall-dialog").close();
+  await task(async () => {
+    message("Removing multiplayer…");
+    const result = await native("uninstall");
+    acceptStatus(result.status);
+    const done = result.restartRequired
+      ? "Multiplayer removed. Restart Windows to finish."
+      : "Multiplayer removed. The original game files are restored.";
+    message(done);
+    toast(done);
+  });
 }
 async function checkLauncherUpdate() {
   if (busy || updateChecking) return;
@@ -384,6 +415,12 @@ export async function initializeDesktop() {
     );
   $("main-action").addEventListener("click", mainAction);
   $("confirm-install").addEventListener("click", performInstall);
+  $("uninstall-mod")?.addEventListener("click", () => {
+    $("uninstall-message").textContent =
+      `Multiplayer${installed ? ` ${installed.version}` : ""} will be removed and the original game files restored. Windows may ask for administrator permission.`;
+    $("uninstall-dialog").showModal();
+  });
+  $("confirm-uninstall")?.addEventListener("click", uninstall);
   $("play-current").addEventListener("click", () => task(play));
   $("check-game").addEventListener("click", checkGame);
   $("open-folder").addEventListener("click", () =>
@@ -486,13 +523,12 @@ export async function initializeDesktop() {
   $("launcher-check").addEventListener("click", checkLauncherUpdate);
   $("launcher-install").addEventListener("click", installLauncherUpdate);
   await listen("native-progress", (event) => {
-    message(event.payload.text);
-    const progress = $("operation-progress");
-    progress.hidden = false;
-    if (event.payload.percent > 0) {
-      progress.max = 100;
-      progress.value = event.payload.percent;
-    } else progress.removeAttribute("value");
+    progress = {
+      text: String(event.payload.text),
+      percent: Math.max(0, Math.min(100, Math.round(event.payload.percent) || 0)),
+    };
+    message("Keep the launcher open until this finishes.");
+    render();
   });
   await listen("operation-busy", () =>
     toast("An operation is in progress. Please wait before closing."),

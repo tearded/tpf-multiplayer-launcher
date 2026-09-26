@@ -15,6 +15,22 @@ public static class UnitTests {
         }
         Check(File.ReadAllText(Path.Combine(game,"alut.dll"))=="mod loader fixture"&&File.ReadAllText(Path.Combine(game,"alut_real.dll"))=="modified backup fixture","stock audio preflight never overwrites unknown files");
     }
+    static void Removal(){
+        string game=Path.Combine(Path.GetTempPath(),"tpf2-removal-test-"+Guid.NewGuid().ToString("N"));
+        foreach(string name in new[]{"alut_real.dll","alut.dll","tpf2_pluginhost.dll","tpf2mp_version.txt","mods/mp_lockstep_1/res/scripts/mp/net.lua","netpunch/netpunch.exe","netpunch/_internal/runtime.dll","plugins/tpf2_bigmap.dll",
+            "save.sav","plugins/unrelated.dll","mods/other_mod/mod.lua","netpunch/user-data.txt"}){
+            string file=Path.Combine(game,name.Replace('/','\\'));Directory.CreateDirectory(Path.GetDirectoryName(file));File.WriteAllText(file,name);
+        }
+        File.WriteAllText(Path.Combine(game,"alut_real.dll"),"stock audio fixture");
+        string stock=ProfileStore.Hash(Path.Combine(game,"alut_real.dll"));
+        LauncherSetup.RemoveLeftovers(game,stock);
+        Check(File.ReadAllText(Path.Combine(game,"alut.dll"))=="stock audio fixture"&&!File.Exists(Path.Combine(game,"alut_real.dll")),"removal restores the stock audio DLL");
+        Check(!LauncherSetup.HasLeftovers(game)&&!Directory.Exists(Path.Combine(game,"mods","mp_lockstep_1"))&&!Directory.Exists(Path.Combine(game,"netpunch","_internal")),"removal deletes every launcher-managed file");
+        Check(new[]{"save.sav","plugins/unrelated.dll","mods/other_mod/mod.lua","netpunch/user-data.txt"}.All(name=>File.ReadAllText(Path.Combine(game,name.Replace('/','\\')))==name),"removal keeps saves, other mods, plugins and user data");
+        File.WriteAllText(Path.Combine(game,"alut.dll"),"mod loader");File.WriteAllText(Path.Combine(game,"tpf2_menu.dll"),"leftover");
+        bool refused=false;try{LauncherSetup.RemoveLeftovers(game,stock);}catch(InvalidOperationException ex){refused=ex.Message.Contains("Steam");}
+        Check(refused&&!File.Exists(Path.Combine(game,"tpf2_menu.dll"))&&File.ReadAllText(Path.Combine(game,"alut.dll"))=="mod loader","removal without stock backup points to Steam and never guesses the audio DLL");
+    }
     static void RuntimeProfiles(){
         string root=Path.Combine(Path.GetTempPath(),"tpf2-runtime-test-"+Guid.NewGuid().ToString("N"));
         string game=Path.Combine(root,"game");Directory.CreateDirectory(game);
@@ -147,6 +163,7 @@ public static class UnitTests {
         Check(saved.Active=="a"&&saved.GameFolder=="game","state files from launcher 1.0.x with a Fork entry still load");
         Reject(()=>LauncherSetup.RequireSilver(new Profile{Channel="local"}),"manual local activation blocked");
         RuntimeProfiles();
+        Removal();
         string data=Path.Combine(Path.GetTempPath(),"tpf2-data-test-"+Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(data,"TPF2-MP","OfficialLauncher"));
         Reject(()=>LauncherSetup.ElevatedDataFolder(data),"elevated helper rejects a data folder without launcher state");

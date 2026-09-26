@@ -50,7 +50,7 @@ public static class Tests {
             string file=ProfileStore.SafePath(game,relative);if(File.Exists(file))File.Delete(file);
         }
         var olderBuild=store.Capture(game,"local","0.4.30","Older build fixture","");
-        var official=store.PrepareRelease(release,p=>{}).GetAwaiter().GetResult();
+        var official=store.PrepareRelease(release,(t,p)=>{}).GetAwaiter().GetResult();
         Check(official.Channel=="official"&&official.PackageHash==digest,"offizielles MSI vollständig isoliert entpackt");
         store.Activate(official);Check(store.Matches(official,game),"Wechsel zum offiziellen Release alle Dateihashes");
         foreach(string component in new[]{"plugins/tpf2_bigmap.dll","plugins/tpf2_bigmap.cfg"})

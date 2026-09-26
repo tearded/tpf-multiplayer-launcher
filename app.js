@@ -46,6 +46,17 @@ if (window.__TAURI_INTERNALS__) {
   import("./preview.js");
 }
 
+// Older releases live in the release history; jump there and load the first page.
+document.getElementById("choose-version")?.addEventListener("click", () => {
+  const load = document.getElementById("load-history");
+  if (!document.getElementById("history-list").children.length && !load.hidden)
+    load.click();
+  document.getElementById("history-title").focus({ preventScroll: true });
+  document
+    .querySelector(".release-history")
+    .scrollIntoView({ block: "start" });
+});
+
 // Current and historical notes share the same sanitized Markdown renderer.
 window.launcherHistory = {
   add(entries, install) {
