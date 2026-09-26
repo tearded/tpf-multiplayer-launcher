@@ -374,14 +374,22 @@ pub fn with_packages(mut release: Value, assets: Option<Value>) -> Value {
     release
 }
 
-/// A release of the mod, not of the launcher: launcher updates are their own
-/// releases in the mod repo, tagged `launcher-v<version>`, never offered as the mod.
-pub fn is_mod_release(release: &Value) -> bool {
-    !release["draft"].as_bool().unwrap_or(false) && !release["tag_name"].as_str().unwrap_or("").starts_with("launcher-")
+/// A release of the mod: not a launcher update (its own release in the mod repo,
+/// tagged `launcher-v<version>`), and not the copy of a version's install files
+/// tagged without the "v" (`0.7.0.6` beside `v0.7.0.6`) that the mod repo keeps
+/// for Windows launchers before 1.3.0. `tags` are the tags of the same listing.
+pub fn is_mod_release(release: &Value, tags: &std::collections::HashSet<String>) -> bool {
+    let tag = release["tag_name"].as_str().unwrap_or("");
+    !release["draft"].as_bool().unwrap_or(false) && !tag.starts_with("launcher-")
+        && (tag.starts_with('v') || !tags.contains(&format!("v{tag}")))
+}
+fn tags_of(releases: &[Value]) -> std::collections::HashSet<String> {
+    releases.iter().filter_map(|r| r["tag_name"].as_str().map(str::to_owned)).collect()
 }
 /// The newest mod release of the track, by publication date.
 pub fn select_release(releases: &[Value], experimental: bool) -> Option<Value> {
-    releases.iter().filter(|r| is_mod_release(r) && is_experimental(r) == experimental)
+    let tags = tags_of(releases);
+    releases.iter().filter(|r| is_mod_release(r, &tags) && is_experimental(r) == experimental)
         .max_by(|a, b| a["published_at"].as_str().unwrap_or("").cmp(b["published_at"].as_str().unwrap_or(""))).cloned()
 }
 fn fetch(experimental: bool) -> Result<Option<Value>, String> {
@@ -683,7 +691,8 @@ pub fn run(app: &AppHandle, action: &str, value: Option<&str>) -> Result<Value, 
             let mode = find_game(&settings).map(|g| g.mode).unwrap_or(Mode::Native);
             let releases = release_page(page, 20)?;
             let index = packages_index();
-            let entries: Vec<Value> = releases.iter().filter(|r| is_mod_release(r) && is_experimental(r) == settings.experimental)
+            let tags = tags_of(&releases);
+            let entries: Vec<Value> = releases.iter().filter(|r| is_mod_release(r, &tags) && is_experimental(r) == settings.experimental)
                 .map(|r| {
                     let tag = r["tag_name"].as_str().unwrap_or("");
                     summary(&with_packages(r.clone(), index.get(tag).cloned()), mode, settings.experimental)
@@ -791,7 +800,13 @@ mod tests {
         let mut launcher_beta = release("launcher-v1.3.0", "Launcher 1.3.0 beta", true, &[]); launcher_beta["published_at"] = json!("2026-09-27T01:00:00Z");
         assert_eq!(select_release(&[a.clone(), b.clone(), launcher.clone()], false).unwrap()["tag_name"], "v0.7.0.5");
         assert_eq!(select_release(&[c.clone(), launcher_beta.clone()], true).unwrap()["tag_name"], "v0.7.1");
-        assert!(!is_mod_release(&launcher) && !is_mod_release(&launcher_beta) && is_mod_release(&b));
+        let all = tags_of(&[launcher.clone(), launcher_beta.clone(), b.clone()]);
+        assert!(!is_mod_release(&launcher, &all) && !is_mod_release(&launcher_beta, &all) && is_mod_release(&b, &all));
+        // the install-file copy for old launchers, published after its v twin, is not a version
+        let mut d = release("v0.7.0.6", "0.7.0.6", false, &[]); d["published_at"] = json!("2026-09-28T00:00:00Z");
+        let mut copy = release("0.7.0.6", "0.7.0.6 install files", false, &[]); copy["published_at"] = json!("2026-09-28T00:01:00Z");
+        assert_eq!(select_release(&[b.clone(), d.clone(), copy.clone()], false).unwrap()["tag_name"], "v0.7.0.6");
+        assert_eq!(select_release(&[b.clone(), copy.clone()], false).unwrap()["tag_name"], "0.7.0.6");
     }
     #[test] fn process_scan_runs() { let _ = game_running(); }
     #[test] fn start_script_mark() {
